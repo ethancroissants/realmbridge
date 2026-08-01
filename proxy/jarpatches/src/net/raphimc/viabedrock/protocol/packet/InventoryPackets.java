@@ -447,6 +447,11 @@ public class InventoryPackets {
             final Container container = inventoryTracker.getContainerServerbound((byte) containerId);
             if (container == null) {
                 if (containerId == ContainerID.CONTAINER_ID_INVENTORY.getValue()) {
+                    // VP+: emulate the click on the player's own inventory (upstream has no
+                    // handler, so the contents were pushed back and every move snapped back).
+                    if (net.raphimc.viabedrock.experimental.VppInventoryClicks.handleClick(wrapper.user(), slot, button, action)) {
+                        return;
+                    }
                     // Bedrock client can send multiple OpenInventory requests if the server doesn't respond, so this is fine here
                     final PacketWrapper interact = PacketWrapper.create(ServerboundBedrockPackets.INTERACT, wrapper.user());
                     interact.write(Types.UNSIGNED_BYTE, (short) InteractPacket_Action.OpenInventory.getValue()); // action
