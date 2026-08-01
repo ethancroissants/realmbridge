@@ -112,6 +112,20 @@ public class ViaProxyPlusPlugin extends ViaProxyPlugin {
      *
      * Returns the number of connections resynced.
      */
+    private final java.util.Set<Integer> loggedSessions = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+
+    /** Logs the server's inventory mode once per connection (drives how clicks must be sent). */
+    private void logSessionMode(final UserConnection user) {
+        try {
+            final net.raphimc.viabedrock.protocol.storage.GameSessionStorage session =
+                    user.get(net.raphimc.viabedrock.protocol.storage.GameSessionStorage.class);
+            if (session == null || !this.loggedSessions.add(System.identityHashCode(user))) return;
+            LOGGER.log(Level.INFO, "[VP+] server inventory mode: "
+                    + (session.isInventoryServerAuthoritative() ? "SERVER-AUTHORITATIVE" : "legacy (client-authoritative)"));
+        } catch (Throwable ignored) {
+        }
+    }
+
     private int resyncAllInventories() {
         int count = 0;
         try {
@@ -123,6 +137,7 @@ public class ViaProxyPlusPlugin extends ViaProxyPlugin {
                 if (tracker == null) {
                     continue; // not a Bedrock session
                 }
+                this.logSessionMode(user);
                 // Don't clobber an open chest/furnace UI mid-interaction.
                 if (tracker.getCurrentContainer() != null || tracker.getPendingCloseContainer() != null) {
                     continue;

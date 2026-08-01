@@ -33,8 +33,12 @@ Java 17+ is required (the Minecraft launcher's bundled Java works).
 - Client-side mods work normally. Server-dependent mods can't (there is no
   Java server). Movement cheats will rubber-band — Bedrock realms are
   server-authoritative.
-- Lighting is approximate (uniform bright): light translation isn't
-  implemented upstream yet.
+- Lighting is approximate (uniform bright): Bedrock servers don't send light
+  data (Bedrock clients compute it themselves), so there's nothing to
+  translate — caves and night look flat until a light engine is written.
+- Crafting through the 2x2/3x3 grid isn't wired up yet (Bedrock uses a
+  separate crafting protocol); use a Bedrock client or another player for
+  now. Chests, shulkers, furnaces, dropping and all inventory moves do work.
 - Terminal-only alternative (macOS/Linux): grab
   `bedrock-realm-bridge.tar.gz` from Releases —
   `./bedrock-realm play <invite-code>`.
