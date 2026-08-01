@@ -17,6 +17,16 @@ javac -proc:none --release 17 -cp "$BASE_JAR" -d "$OUT" \
 
 cp "$BASE_JAR" "$TARGET"
 (cd "$OUT" && jar -uf "$TARGET" $(find . -name '*.class'))
+
+echo "==> bytecode patch: NetherNet signaling frame compatibility"
+ASM_OUT="$HERE/jarpatches/asm-out"
+ASM_WORK="$HERE/jarpatches/asm-work"
+SIGNALING_CLASS="dev/kastle/netty/channel/nethernet/signaling/NetherNetXboxRpcSignaling.class"
+rm -rf "$ASM_OUT" "$ASM_WORK" && mkdir -p "$ASM_OUT" "$ASM_WORK"
+javac -proc:none --release 17 -cp "$TARGET" -d "$ASM_OUT" "$HERE/tools/AsmPatcher.java"
+(cd "$ASM_WORK" && unzip -o -q "$TARGET" "$SIGNALING_CLASS")
+java -cp "$ASM_OUT:$TARGET" AsmPatcher "$ASM_WORK/$SIGNALING_CLASS"
+(cd "$ASM_WORK" && jar -uf "$TARGET" "$SIGNALING_CLASS")
 echo "Patched jar installed: $TARGET"
 echo "Patched classes:"
 (cd "$OUT" && find . -name '*.class' | sed 's|^\./|  |')
