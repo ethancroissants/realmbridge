@@ -18,6 +18,20 @@ public final class VppSignalingCompat {
     private VppSignalingCompat() {
     }
 
+    private static void logInterestingFrame(final JsonElement element) {
+        try { // the library drops the CONNECTERROR reason code; surface it
+            if (!element.isJsonObject()) return;
+            final JsonElement message = element.getAsJsonObject().get("Message");
+            if (message == null || !message.isJsonPrimitive()) return;
+            final String text = message.getAsString();
+            if (text.contains("CONNECTERROR") || text.contains("\"message\":\"CONNECTERROR")) {
+                java.util.logging.Logger.getLogger("ViaProxyPlus")
+                        .log(java.util.logging.Level.WARNING, "[VP+] signaling rejection: " + text);
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
     public static JsonArray paramsAsArray(final JsonObject frame, final String key) {
         final JsonElement element = frame == null ? null : frame.get(key);
         if (element == null || element.isJsonNull()) {
@@ -26,6 +40,7 @@ public final class VppSignalingCompat {
         if (element.isJsonArray()) {
             return element.getAsJsonArray();
         }
+        logInterestingFrame(element);
         final JsonArray wrapped = new JsonArray(); // single message object
         wrapped.add(element);
         return wrapped;
