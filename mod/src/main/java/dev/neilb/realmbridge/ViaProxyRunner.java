@@ -34,6 +34,7 @@ public final class ViaProxyRunner {
 
     private final Path installDir = Path.of(System.getProperty("user.home"), ".bedrock-realm-bridge");
     private volatile Process process;
+    private volatile String currentTarget;
 
     public boolean isRunning() {
         final Process p = this.process;
@@ -96,15 +97,23 @@ public final class ViaProxyRunner {
 
     /** Launches ViaProxy cli (blocking until the port is up; call off-thread). */
     public synchronized void start(final String netherNetAddress, final int accountIndex) throws Exception {
+        if (this.isRunning() && netherNetAddress.equals(this.currentTarget)) {
+            // Already bridging this exact realm session: reuse it. Respawning would
+            // abandon the established signaling session, and the realm host starts
+            // refusing connections (CONNECTERROR) when those pile up.
+            RealmBridgeCore.LOGGER.info("Reusing the running bridge for {}", netherNetAddress);
+            return;
+        }
         if (this.isRunning()) {
-            this.stop(); // restart with the fresh realm target/filter
+            this.stop(); // different realm session - restart cleanly
+            Thread.sleep(1000); // let it close its signaling session
         }
         // A bridge from a previous game session may still hold the port with a
         // dead realm target; it would make us report ready while joins time out.
         try (Socket probe = new Socket()) {
             probe.connect(new InetSocketAddress("127.0.0.1", 25568), 300);
             RealmBridgeCore.LOGGER.warn("Stale bridge holding {} - terminating it", BIND);
-            new ProcessBuilder("sh", "-c", "lsof -ti :25568 | xargs kill -9").start().waitFor();
+            killPortListeners();
             Thread.sleep(500);
         } catch (IOException ignored) {
             // port free - the normal case
@@ -122,6 +131,7 @@ public final class ViaProxyRunner {
         builder.redirectOutput(this.installDir.resolve("logs").resolve("realmbridge-viaproxy.log").toFile());
         builder.redirectErrorStream(true);
         this.process = builder.start();
+        this.currentTarget = netherNetAddress;
 
         final long deadline = System.currentTimeMillis() + 60_000;
         while (System.currentTimeMillis() < deadline) {
@@ -140,11 +150,46 @@ public final class ViaProxyRunner {
         throw new IllegalStateException("ViaProxy did not open " + BIND + " within 60s");
     }
 
+    /**
+     * Terminates processes *listening* on the bridge port. Only listeners are
+     * considered: the game client also holds a socket to this port while it is
+     * connected, and killing that kills Minecraft itself. Our own process is
+     * skipped as a second safety net.
+     */
+    private static void killPortListeners() {
+        if (System.getProperty("os.name", "").toLowerCase().contains("win")) {
+            return; // lsof is unix-only; a stale bridge is reported instead
+        }
+        try {
+            final Process lsof = new ProcessBuilder("sh", "-c", "lsof -ti tcp:25568 -sTCP:LISTEN").start();
+            final String output = new String(lsof.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            lsof.waitFor();
+            final long ownPid = ProcessHandle.current().pid();
+            for (final String token : output.split("\\s+")) {
+                if (token.isBlank()) continue;
+                final long pid;
+                try {
+                    pid = Long.parseLong(token.trim());
+                } catch (NumberFormatException ignored) {
+                    continue;
+                }
+                if (pid == ownPid) continue; // never the game
+                ProcessHandle.of(pid).ifPresent(handle -> {
+                    RealmBridgeCore.LOGGER.info("Terminating stale bridge process {}", pid);
+                    handle.destroyForcibly();
+                });
+            }
+        } catch (Exception e) {
+            RealmBridgeCore.LOGGER.warn("Could not clean up the stale bridge", e);
+        }
+    }
+
     public synchronized void stop() {
         final Process p = this.process;
         if (p != null) {
-            p.destroy();
+            p.destroy(); // SIGTERM: lets it close the signaling session cleanly
             this.process = null;
+            this.currentTarget = null;
         }
     }
 

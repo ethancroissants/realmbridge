@@ -164,23 +164,7 @@ public final class RealmBridgeScreen extends Screen {
     private void join(final RealmsServer realm) {
         this.busy = true;
         this.status("Waking '" + realm.getName() + "'...");
-        this.core.async(() -> {
-            this.core.runner().ensureInstalled(this::status);
-            final int accountIndex = this.core.runner().ensureAccount(this.core.auth().serialized());
-            final RealmsJoinInformation join = this.core.realms().joinWorld(realm);
-            this.core.runner().setRealmFilter(realm.getName());
-            this.status("Starting bridge...");
-            this.core.runner().start(join.getAddress(), accountIndex);
-            this.busy = false;
-            this.minecraft.execute(() -> ConnectScreen.startConnecting(
-                    this.parent, this.minecraft,
-                    ServerAddress.parseString(ViaProxyRunner.BIND),
-                    new ServerData(realm.getName() + " (Bedrock)", ViaProxyRunner.BIND, ServerData.Type.OTHER),
-                    false, null));
-        }, e -> {
-            this.busy = false;
-            this.status("Failed: " + e.getMessage());
-        });
+        JoinFlow.start(this.core, realm, this.parent, this::status);
     }
 
     @Override

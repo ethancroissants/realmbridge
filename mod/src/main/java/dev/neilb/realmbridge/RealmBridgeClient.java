@@ -27,7 +27,16 @@ public final class RealmBridgeClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        // A successful join means any later disconnect is the player's own doing,
+        // not a failed realm connection to retry.
+        net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.JOIN.register(
+                (handler, sender, client) -> JoinFlow.clear());
+
         ScreenEvents.AFTER_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
+            if (screen instanceof net.minecraft.client.gui.screens.DisconnectedScreen) {
+                // a realm that just woke often refuses the first connection
+                JoinFlow.retryIfOurs(this.core);
+            }
             if (screen instanceof JoinMultiplayerScreen) {
                 Screens.getWidgets(screen).add(Button.builder(Component.literal("Bedrock Realms"),
                                 b -> client.setScreen(new RealmBridgeScreen(screen, this.core)))
@@ -81,14 +90,7 @@ public final class RealmBridgeClient implements ClientModInitializer {
                 this.chat("Pick a realm: " + worlds.stream().map(RealmsServer::getName).toList());
                 return;
             }
-            this.core.runner().ensureInstalled(this::chat);
-            final int accountIndex = this.core.runner().ensureAccount(this.core.auth().serialized());
-            this.chat("Waking '" + realm.getName() + "'...");
-            final RealmsJoinInformation join = service.joinWorld(realm);
-            this.core.runner().setRealmFilter(realm.getName());
-            this.chat("Starting bridge...");
-            this.core.runner().start(join.getAddress(), accountIndex);
-            this.chat("Ready! Multiplayer -> Direct Connection -> " + ViaProxyRunner.BIND);
+            JoinFlow.start(this.core, realm, null, this::chat);
         }, e -> this.chat("Error: " + e.getMessage()));
     }
 
