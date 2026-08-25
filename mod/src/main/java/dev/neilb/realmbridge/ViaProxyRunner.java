@@ -99,6 +99,11 @@ public final class ViaProxyRunner {
                         || line.contains("SIGNAL_CONNECT_ERROR")
                         || line.contains("PROXY KICK")
                         || line.contains("signaling rejection")
+                        // Once the host accepts the offer the connection can still
+                        // die in ICE, where the only useful words are these.
+                        || line.contains("[VP+] ice: candidate error")
+                        || line.contains("only host candidates")
+                        || line.contains("remote answer REJECTED")
                         || line.contains("Realm auto-refresh failed"))
                 .toList();
     }

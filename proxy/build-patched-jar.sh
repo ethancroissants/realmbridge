@@ -30,6 +30,8 @@ ASM_WORK="$HERE/jarpatches/asm-work"
 SIGNALING_CLASS="dev/kastle/netty/channel/nethernet/signaling/NetherNetXboxRpcSignaling.class"
 # The offer SDP needs an a=identity assertion or realm hosts refuse it (CONNECTERROR 37).
 IDENTITY_CLASS='dev/kastle/netty/channel/nethernet/NetherNetClientChannel$2$1.class'
+# ICE runs entirely in silence once the host accepts: empty observers everywhere.
+ICE_CLASS='dev/kastle/netty/channel/nethernet/NetherNetClientChannel.class'
 rm -rf "$ASM_OUT" "$ASM_WORK" && mkdir -p "$ASM_OUT" "$ASM_WORK"
 javac -proc:none --release 17 -cp "$TARGET" -d "$ASM_OUT" "$HERE/tools/AsmPatcher.java"
 
@@ -45,6 +47,10 @@ java -cp "$ASM_OUT:$TARGET" AsmPatcher signalingtap "$ASM_WORK/$SIGNALING_CLASS"
 (cd "$ASM_WORK" && unzip -o -q "$TARGET" "$IDENTITY_CLASS")
 java -cp "$ASM_OUT:$TARGET" AsmPatcher identity "$ASM_WORK/$IDENTITY_CLASS"
 (cd "$ASM_WORK" && jar -uf "$TARGET" "$IDENTITY_CLASS")
+
+(cd "$ASM_WORK" && unzip -o -q "$TARGET" "$ICE_CLASS")
+java -cp "$ASM_OUT:$TARGET" AsmPatcher ice "$ASM_WORK/$ICE_CLASS"
+(cd "$ASM_WORK" && jar -uf "$TARGET" "$ICE_CLASS")
 echo "Patched jar installed: $TARGET"
 echo "Patched classes:"
 (cd "$OUT" && find . -name '*.class' | sed 's|^\./|  |')

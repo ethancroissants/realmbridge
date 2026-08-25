@@ -25,16 +25,25 @@ import java.util.List;
  *                -> VppIdentityAssertion.buildSignalConnectRequest
  *              Adds the a=identity assertion realm hosts require. Without it the
  *              host refuses the offer with CONNECTERROR <id> 37.
+ *
+ *   ice        PeerConnectionFactory.createPeerConnection -> VppIce.createPeerConnection
+ *              RTCPeerConnection.setRemoteDescription    -> VppIce.setRemoteDescription
+ *              Everything after the host accepts the offer happens in silence:
+ *              the answer observer is empty and the peer connection observer
+ *              implements onIceCandidate and nothing else. Wrapping both gives
+ *              ICE a voice, and lets the configuration pick up fallback STUN so
+ *              a server-reflexive candidate actually gets gathered.
  */
 public final class AsmPatcher {
 
     private static final String COMPAT = "net/raphimc/viabedrock/experimental/VppSignalingCompat";
     private static final String IDENTITY = "net/raphimc/viabedrock/experimental/VppIdentityAssertion";
     private static final String TAP = "net/raphimc/viabedrock/experimental/VppSignalingTap";
+    private static final String ICE = "net/raphimc/viabedrock/experimental/VppIce";
 
     public static void main(final String[] args) throws Exception {
         if (args.length != 2) {
-            System.err.println("usage: AsmPatcher <signaling|identity|signalingtap> <class file>");
+            System.err.println("usage: AsmPatcher <signaling|identity|signalingtap|ice> <class file>");
             System.exit(2);
         }
         final String patch = args[0];
@@ -60,6 +69,22 @@ public final class AsmPatcher {
                     new Redirect(Opcodes.INVOKEVIRTUAL, "com/google/gson/Gson", "toJson",
                             "(Lcom/google/gson/JsonElement;)Ljava/lang/String;", TAP, "outbound",
                             "(Lcom/google/gson/Gson;Lcom/google/gson/JsonElement;)Ljava/lang/String;"));
+            // The answer, the candidates and the connection states all arrive
+            // through calls this class makes on itself, so one class carries both.
+            case "ice" -> List.of(
+                    new Redirect(Opcodes.INVOKEVIRTUAL, "dev/kastle/webrtc/PeerConnectionFactory",
+                            "createPeerConnection",
+                            "(Ldev/kastle/webrtc/RTCConfiguration;Ldev/kastle/webrtc/PeerConnectionObserver;)"
+                                    + "Ldev/kastle/webrtc/RTCPeerConnection;",
+                            ICE, "createPeerConnection",
+                            "(Ldev/kastle/webrtc/PeerConnectionFactory;Ldev/kastle/webrtc/RTCConfiguration;"
+                                    + "Ldev/kastle/webrtc/PeerConnectionObserver;)Ldev/kastle/webrtc/RTCPeerConnection;"),
+                    new Redirect(Opcodes.INVOKEVIRTUAL, "dev/kastle/webrtc/RTCPeerConnection",
+                            "setRemoteDescription",
+                            "(Ldev/kastle/webrtc/RTCSessionDescription;Ldev/kastle/webrtc/SetSessionDescriptionObserver;)V",
+                            ICE, "setRemoteDescription",
+                            "(Ldev/kastle/webrtc/RTCPeerConnection;Ldev/kastle/webrtc/RTCSessionDescription;"
+                                    + "Ldev/kastle/webrtc/SetSessionDescriptionObserver;)V"));
             default -> throw new IllegalArgumentException("unknown patch: " + patch);
         };
 
