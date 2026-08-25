@@ -44,12 +44,15 @@ public final class JoinFlow {
         final RealmsServer target = realm;
         core.async(() -> {
             core.runner().ensureInstalled(status);
-            final int accountIndex = core.runner().ensureAccount(core.auth().serialized());
             final String name = target.getNameOr("realm");
             status.accept(attempt > 1
                     ? Component.translatable("realmbridge.status.waking_attempt", name, attempt)
                     : Component.translatable("realmbridge.status.waking", name));
             final String address = awaitStableAddress(core, target, status);
+            // Hand ViaProxy the account only now: resolving the realm above forces
+            // the Microsoft tokens to refresh, and stale ones make the realm host
+            // reject the connection with CONNECTERROR 37 (identity verification).
+            final int accountIndex = core.runner().ensureAccount(core.auth().serialized());
             core.runner().setRealmFilter(target.getName());
             status.accept(Component.translatable("realmbridge.status.starting"));
             core.runner().start(address, accountIndex);

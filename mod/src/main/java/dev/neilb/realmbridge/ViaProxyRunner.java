@@ -30,7 +30,8 @@ import java.util.function.Consumer;
 public final class ViaProxyRunner {
 
     public static final String BIND = "127.0.0.1:25568";
-    private static final String RELEASE_BASE = "https://github.com/neilbauman21-hub/realmbridge/releases/latest/download/";
+    /** Bridge artifacts are published here by .github/workflows/build.yml. */
+    private static final String RELEASE_BASE = "https://github.com/ethancroissants/realmbridge/releases/latest/download/";
     private static final String BEDROCK_ACCOUNT_TYPE = "net.raphimc.viaproxy.saves.impl.accounts.BedrockAccount";
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
 
@@ -70,9 +71,19 @@ public final class ViaProxyRunner {
     }
 
     /**
-     * Injects the mod's sign-in into ViaProxy's account store if it has no
-     * Bedrock account yet. Returns the 0-based index of the Bedrock account
-     * (ViaProxy's --minecraft-account-index is 0-indexed).
+     * Writes the mod's current sign-in into ViaProxy's account store and returns
+     * the 0-based index of that Bedrock account (ViaProxy's
+     * --minecraft-account-index is 0-indexed).
+     *
+     * The entry is rewritten on every launch, never reused. The mod and ViaProxy
+     * are separate processes refreshing the same Microsoft sign-in, and MSA
+     * rotates the refresh token on every use: whoever refreshes second is left
+     * holding a revoked token. Writing this once at first sign-in - which is
+     * what this used to do - forks the two chains and the realm host eventually
+     * rejects ViaProxy's identity assertion with
+     * {@code CONNECTERROR <id> 37} (ErrorCodeIdentityVerificationFailed), long
+     * after everything appeared to work. The mod's copy is the live one, so it
+     * wins every time.
      */
     public int ensureAccount(final JsonObject serializedAuth) throws IOException {
         final Path savesFile = this.installDir.resolve("saves.json");
@@ -80,21 +91,33 @@ public final class ViaProxyRunner {
                 ? GSON.fromJson(Files.readString(savesFile, StandardCharsets.UTF_8), JsonObject.class)
                 : new JsonObject();
         final JsonArray accounts = root.has("accountsV4") ? root.getAsJsonArray("accountsV4") : new JsonArray();
+
+        int index = -1;
         for (int i = 0; i < accounts.size(); i++) {
             final JsonObject account = accounts.get(i).getAsJsonObject();
             if (BEDROCK_ACCOUNT_TYPE.equals(account.has("accountType") ? account.get("accountType").getAsString() : "")) {
-                return i;
+                index = i;
+                break;
             }
         }
         if (serializedAuth == null) {
+            if (index >= 0) {
+                return index; // signed out in the mod; the stored account is all we have
+            }
             throw new IllegalStateException("Not signed in");
         }
+
         final JsonObject entry = serializedAuth.deepCopy();
         entry.addProperty("accountType", BEDROCK_ACCOUNT_TYPE);
-        accounts.add(entry);
+        if (index >= 0) {
+            accounts.set(index, entry);
+        } else {
+            accounts.add(entry);
+            index = accounts.size() - 1;
+        }
         root.add("accountsV4", accounts);
         Files.writeString(savesFile, GSON.toJson(root), StandardCharsets.UTF_8);
-        return accounts.size() - 1;
+        return index;
     }
 
     /** Launches ViaProxy cli (blocking until the port is up; call off-thread). */
