@@ -5,7 +5,7 @@
 # The result is fully reproducible from this repo: checkout any tag, run this.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BASE_JAR="$HERE/jars/ViaProxy-3.4.13-snapshot-b1927-base.jar"
+BASE_JAR="$HERE/jars/ViaProxy-3.4.13-snapshot-b913-base.jar"
 TARGET="$HOME/.bedrock-realm-bridge/ViaProxy.jar"
 OUT="$HERE/jarpatches/out"
 

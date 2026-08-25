@@ -104,6 +104,8 @@ public final class VppIdentityCheck {
             }
             final PublicKey cpk = KeyFactory.getInstance("EC").generatePublic(
                     new X509EncodedKeySpec(Base64.getDecoder().decode(claims.get("cpk").getAsString())));
+            // The verifier rebuilds the payload from the SDP, so this must match
+            // the canonicalisation used when signing, exactly.
             final String[] jws = assertion.split("\\.", -1);
             final String signingInput = jws[0] + "."
                     + Base64.getUrlEncoder().withoutPadding().encodeToString(

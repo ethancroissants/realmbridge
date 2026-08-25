@@ -14,9 +14,7 @@ import java.security.Signature;
 import java.security.interfaces.ECPrivateKey;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -213,18 +211,23 @@ public final class VppIdentityAssertion {
         return value.length() <= 28 ? value : value.substring(0, 28) + "...(" + value.length() + ")";
     }
 
-    /** {@code a=fingerprint:<algorithm> <digest>}, deduplicated and in SDP order. */
+    /**
+     * Every {@code a=fingerprint:<algorithm> <digest>} line, in SDP order.
+     *
+     * Deliberately not deduplicated: the reference implementation maps over all
+     * matching lines, and the signature only verifies if the payload is built
+     * the same way the verifier rebuilds it.
+     */
     private static List<String[]> parseFingerprints(final String sdp) {
-        final Set<String> seen = new LinkedHashSet<>();
         final List<String[]> fingerprints = new ArrayList<>();
         for (final String rawLine : sdp.split("\r\n|\n|\r")) {
             final String line = rawLine.trim();
             if (!line.startsWith(FINGERPRINT_PREFIX)) {
                 continue;
             }
-            final String[] parts = line.substring(FINGERPRINT_PREFIX.length()).split(" ", 2);
-            if (parts.length == 2 && seen.add(line)) {
-                fingerprints.add(new String[]{parts[0].trim(), parts[1].trim()});
+            final String[] parts = line.substring(FINGERPRINT_PREFIX.length()).trim().split(" ");
+            if (parts.length == 2) {
+                fingerprints.add(new String[]{parts[0], parts[1]});
             }
         }
         return fingerprints;
@@ -290,17 +293,30 @@ public final class VppIdentityAssertion {
         return IDP_DOMAIN;
     }
 
+    /**
+     * Mirrors {@code dev.kastle.netty.util.nethernet.Identity.toJson()} exactly.
+     *
+     * The nesting is the part that matters: {@code assertion} is an escaped JSON
+     * <em>string</em>, not an object -
+     * {@code {"idp":{...},"assertion":"{\"token\":...,\"fingerprints\":...}"}}.
+     * go-nethernet's Go struct marshals it as a nested object, and following that
+     * shape produced an attribute the host could not read at all - which is why
+     * attaching it changed nothing versus sending none.
+     *
+     * That library implements this for the SDP answer (see {@code ServerIdentity});
+     * the offer path has no identity support upstream at all, so this is the same
+     * encoding applied to the client side.
+     */
     private static String encodeIdentity(final String fingerprintAssertion, final String token, final String issuer) {
         final JsonObject assertion = new JsonObject();
-        assertion.addProperty("fingerprints", fingerprintAssertion);
         assertion.addProperty("token", token);
+        assertion.addProperty("fingerprints", fingerprintAssertion);
         final JsonObject idp = new JsonObject();
         idp.addProperty("domain", issuer);
         idp.addProperty("protocol", "default");
         final JsonObject identity = new JsonObject();
-        identity.add("assertion", assertion);
         identity.add("idp", idp);
-        // Standard base64 with padding: what the receiving end decodes with.
+        identity.addProperty("assertion", GSON.toJson(assertion));
         return Base64.getEncoder().encodeToString(GSON.toJson(identity).getBytes(StandardCharsets.UTF_8));
     }
 
