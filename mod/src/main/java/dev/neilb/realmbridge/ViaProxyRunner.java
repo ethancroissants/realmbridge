@@ -103,6 +103,7 @@ public final class ViaProxyRunner {
                         // die in ICE, where the only useful words are these.
                         || line.contains("[VP+] ice: candidate error")
                         || line.contains("only host candidates")
+                        || line.contains("[VP+] netcheck: no STUN server answered")
                         || line.contains("remote answer REJECTED")
                         || line.contains("Realm auto-refresh failed"))
                 .toList();
@@ -243,6 +244,11 @@ public final class ViaProxyRunner {
                 "--target-address", targetAddress,
                 "--target-version", "Bedrock " + BridgeAuth.BEDROCK_VERSION,
                 "--auth-method", "ACCOUNT",
+                // ViaProxy spends this budget on the whole NetherNet handshake:
+                // ICE gathering, hole punching, DTLS and SCTP. Its 8s default
+                // expires while a TURN relay is still being allocated over TLS,
+                // and the retry throws away the peer connection mid-negotiation.
+                "--connect-timeout", "30000",
                 "--minecraft-account-index", String.valueOf(accountIndex));
         builder.directory(this.installDir.toFile());
         builder.redirectErrorStream(true);
