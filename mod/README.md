@@ -2,6 +2,9 @@
 
 Join **Bedrock Minecraft Realms from Java Edition** — from inside the game.
 
+The button lives on the vanilla **Realms** screen. The chat commands are the
+power-user path:
+
 ```
 /realmbridge login          one-time Microsoft sign-in (device code shown in chat)
 /realmbridge code <invite>  accept a Bedrock realm invite code
@@ -14,4 +17,4 @@ Requires the [bedrock-realm-bridge](../bedrock-realm-bridge) install
 Bedrock account added once). The mod handles Realms auth + invite codes itself
 (bundled MinecraftAuth) and drives ViaProxy headless.
 
-Fabric, Minecraft 26.1.x, GPLv3.
+Fabric, Minecraft 26.2 (Java 25), GPLv3.

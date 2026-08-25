@@ -4,6 +4,8 @@
 #   ViaProxy-patched.jar         patched protocol bridge
 #   ViaProxyPlus.jar             QoL plugin
 #   bedrock-realm-bridge.tar.gz  portable CLI bundle (macOS/Linux)
+#
+# Needs JDK 25+ (Minecraft 26.2 ships Java 25 class files) and python3.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIST="$HERE/dist"
@@ -22,7 +24,7 @@ echo "==> cli: portable bundle"
 cp "$HERE"/cli/dist/bedrock-realm-bridge-*.tar.gz "$DIST/bedrock-realm-bridge.tar.gz"
 
 echo "==> mod: fabric jar"
-(cd "$HERE/mod" && gradle build --no-daemon -q)
+(cd "$HERE/mod" && ./gradlew build --no-daemon -q)
 cp "$HERE"/mod/build/libs/realmbridge-*.jar "$DIST/"
 
 echo; echo "Artifacts:"; ls -lh "$DIST"

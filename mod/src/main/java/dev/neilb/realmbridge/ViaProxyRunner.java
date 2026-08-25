@@ -5,6 +5,8 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
+import net.minecraft.network.chat.Component;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -49,16 +51,16 @@ public final class ViaProxyRunner {
     }
 
     /** Downloads the bridge components from the RealmBridge release if missing. */
-    public void ensureInstalled(final Consumer<String> status) throws Exception {
+    public void ensureInstalled(final Consumer<Component> status) throws Exception {
         Files.createDirectories(this.installDir.resolve("plugins"));
         final Path jar = this.installDir.resolve("ViaProxy.jar");
         if (!Files.exists(jar)) {
-            status.accept("Downloading bridge (~45 MB, one time)...");
+            status.accept(Component.translatable("realmbridge.status.downloading"));
             this.download(RELEASE_BASE + "ViaProxy-patched.jar", jar);
         }
         final Path plugin = this.installDir.resolve("plugins").resolve("ViaProxyPlus.jar");
         if (!Files.exists(plugin)) {
-            status.accept("Downloading bridge plugin...");
+            status.accept(Component.translatable("realmbridge.status.downloading_plugin"));
             this.download(RELEASE_BASE + "ViaProxyPlus.jar", plugin);
         }
         final Path vbConfig = this.installDir.resolve("viabedrock.yml");

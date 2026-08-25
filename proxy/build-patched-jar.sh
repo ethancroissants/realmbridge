@@ -15,6 +15,7 @@ rm -rf "$OUT" && mkdir -p "$OUT"
 javac -proc:none --release 17 -cp "$BASE_JAR" -d "$OUT" \
   $(find "$HERE/jarpatches/src" -name '*.java')
 
+mkdir -p "$(dirname "$TARGET")"
 cp "$BASE_JAR" "$TARGET"
 (cd "$OUT" && jar -uf "$TARGET" $(find . -name '*.class'))
 

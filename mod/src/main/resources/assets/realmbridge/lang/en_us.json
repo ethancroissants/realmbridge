@@ -1,0 +1,48 @@
+{
+  "realmbridge.title": "Bedrock Realms",
+  "realmbridge.button.open": "Bedrock Realms",
+  "realmbridge.button.open.tooltip": "Join a Bedrock Edition realm from Java Edition.",
+
+  "realmbridge.signin.blurb": "Sign in with the Microsoft account that owns the Bedrock realm, or that the invite was sent to.",
+  "realmbridge.signin.button": "Sign in with Microsoft",
+
+  "realmbridge.devicecode.instructions": "Go to %s and enter this code:",
+  "realmbridge.devicecode.field": "Sign-in code",
+  "realmbridge.devicecode.copy": "Copy code",
+  "realmbridge.devicecode.copied": "Code copied to your clipboard.",
+  "realmbridge.devicecode.open": "Open sign-in page",
+  "realmbridge.devicecode.open.tooltip": "Opens your browser with the code already filled in.",
+  "realmbridge.devicecode.waiting": "Waiting for you to finish signing in...",
+  "realmbridge.devicecode.expires": "This code expires in %s.",
+  "realmbridge.devicecode.expired": "This code has expired. Start the sign-in again.",
+
+  "realmbridge.realms.loading": "Loading your realms...",
+  "realmbridge.realms.empty": "No Bedrock realms on this account yet. Paste an invite code below to join one.",
+  "realmbridge.realms.pick": "Pick a realm to join.",
+  "realmbridge.realms.more": "...and %s more. Accept fewer invites or use /realmbridge play <name>.",
+  "realmbridge.realms.refresh": "Refresh",
+  "realmbridge.realms.signout": "Sign out",
+
+  "realmbridge.realm.unavailable": "%s (unavailable)",
+  "realmbridge.realm.tooltip.owner": "Owner: %s",
+  "realmbridge.realm.tooltip.version": "Bedrock %s",
+  "realmbridge.realm.tooltip.expired": "This realm's subscription has expired.",
+  "realmbridge.realm.tooltip.incompatible": "This realm runs a Bedrock version the bridge can't translate yet.",
+
+  "realmbridge.invite.hint": "Realm invite code",
+  "realmbridge.invite.add": "Add",
+  "realmbridge.invite.empty": "Enter a realm invite code first.",
+  "realmbridge.invite.accepting": "Accepting invite...",
+  "realmbridge.invite.joined": "Joined '%s'.",
+
+  "realmbridge.status.signin_failed": "Sign-in failed: %s",
+  "realmbridge.status.realms_failed": "Could not load your realms: %s",
+  "realmbridge.status.invite_failed": "That invite code didn't work: %s",
+  "realmbridge.status.waking": "Waking '%s'...",
+  "realmbridge.status.waking_attempt": "Waking '%s' (attempt %s)...",
+  "realmbridge.status.settling": "Waiting for the realm to finish starting...",
+  "realmbridge.status.downloading": "Downloading the bridge (~45 MB, one time)...",
+  "realmbridge.status.downloading_plugin": "Downloading the bridge plugin...",
+  "realmbridge.status.starting": "Starting the bridge...",
+  "realmbridge.status.failed": "Failed: %s"
+}

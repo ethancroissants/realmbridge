@@ -8,22 +8,27 @@ Java and Bedrock normally can't share a Realm. RealmBridge glues them together:
 a patched [ViaProxy](https://github.com/ViaVersion/ViaProxy)/[ViaBedrock](https://github.com/RaphiMC/ViaBedrock)
 translates the protocol live, a companion plugin makes it feel vanilla
 (instant item pickups, smooth movement, auto realm wake/reconnect), and a
-Fabric mod wraps everything behind one button in your Multiplayer screen.
+Fabric mod wraps everything behind one button on your Realms screen.
 
 ## Install (2 minutes)
 
-1. Install [Fabric](https://fabricmc.net/use/installer/) for Minecraft 26.1.x
-   and put [fabric-api](https://modrinth.com/mod/fabric-api) +
+1. Install [Fabric](https://fabricmc.net/use/installer/) for Minecraft 26.2 and
+   put [fabric-api](https://modrinth.com/mod/fabric-api) +
    **`realmbridge-<version>.jar`** (from [Releases](../../releases/latest))
-   into your `mods/` folder.
-2. Launch the game → **Multiplayer → Bedrock Realms** (top-right button).
-3. **Sign in with Microsoft** (one time — a code + browser button appear;
-   use the account that owns/joins the Bedrock realm).
+   into your `mods/` folder. Those two jars are the whole install — everything
+   else RealmBridge needs is bundled inside its jar or fetched on first use.
+2. Launch the game → **Multiplayer → Realms → Bedrock Realms** (the button
+   under Play/Configure/Leave).
+3. **Sign in with Microsoft** (one time). The screen shows your sign-in code
+   with a **Copy code** button; **Open sign-in page** launches the browser with
+   the code already filled in. Use the account that owns or was invited to the
+   Bedrock realm.
 4. Paste a **realm invite code** → your realm appears → **click it**.
 
 The mod downloads the bridge (~45 MB, one time) to `~/.bedrock-realm-bridge`,
 signs it in with your account automatically, wakes the realm, and connects you.
-Java 17+ is required (the Minecraft launcher's bundled Java works).
+Minecraft 26.2 runs on Java 25, and the launcher's bundled runtime is what the
+bridge uses — no separate Java install needed.
 
 ## Good to know
 
@@ -52,8 +57,11 @@ Java 17+ is required (the Minecraft launcher's bundled Java works).
 | `cli/` | Python CLI + portable bundle | `bedrock-realm-bridge.tar.gz` |
 
 ```bash
-./build-all.sh   # JDK 17+, gradle, python3 → everything lands in dist/
+./build-all.sh   # JDK 25+, python3 → everything lands in dist/
 ```
+
+Gradle comes from the wrapper in `mod/`; CI runs the same steps
+(`.github/workflows/build.yml`) and attaches the artifacts to tagged releases.
 
 ## Credits & license
 

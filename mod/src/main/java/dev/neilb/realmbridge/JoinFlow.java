@@ -5,6 +5,7 @@ import net.minecraft.client.gui.screens.ConnectScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
+import net.minecraft.network.chat.Component;
 import net.raphimc.minecraftauth.extra.realms.model.RealmsServer;
 
 import java.util.function.Consumer;
@@ -32,23 +33,25 @@ public final class JoinFlow {
     }
 
     public static void start(final RealmBridgeCore core, final RealmsServer target,
-                             final Screen parent, final Consumer<String> status) {
+                             final Screen parent, final Consumer<Component> status) {
         realm = target;
         parentScreen = parent;
         attempt = 1;
         run(core, status);
     }
 
-    private static void run(final RealmBridgeCore core, final Consumer<String> status) {
+    private static void run(final RealmBridgeCore core, final Consumer<Component> status) {
         final RealmsServer target = realm;
         core.async(() -> {
             core.runner().ensureInstalled(status);
             final int accountIndex = core.runner().ensureAccount(core.auth().serialized());
-            status.accept("Waking '" + target.getName() + "'"
-                    + (attempt > 1 ? " (attempt " + attempt + ")" : "") + "...");
+            final String name = target.getNameOr("realm");
+            status.accept(attempt > 1
+                    ? Component.translatable("realmbridge.status.waking_attempt", name, attempt)
+                    : Component.translatable("realmbridge.status.waking", name));
             final String address = awaitStableAddress(core, target, status);
             core.runner().setRealmFilter(target.getName());
-            status.accept("Starting bridge...");
+            status.accept(Component.translatable("realmbridge.status.starting"));
             core.runner().start(address, accountIndex);
             attemptedAt = System.currentTimeMillis();
 
@@ -56,14 +59,15 @@ public final class JoinFlow {
             minecraft.execute(() -> ConnectScreen.startConnecting(
                     parentScreen, minecraft,
                     ServerAddress.parseString(ViaProxyRunner.BIND),
-                    new ServerData(target.getName() + " (Bedrock)", ViaProxyRunner.BIND, ServerData.Type.OTHER),
+                    new ServerData(name + " (Bedrock)", ViaProxyRunner.BIND, ServerData.Type.OTHER),
                     false, null));
-        }, e -> status.accept("Failed: " + rootMessage(e)));
+        }, e -> status.accept(Component.translatable("realmbridge.status.failed",
+                RealmBridgeCore.rootMessage(e))));
     }
 
     /** Polls the Realms API until the session address stops changing. */
     private static String awaitStableAddress(final RealmBridgeCore core, final RealmsServer target,
-                                             final Consumer<String> status) throws Exception {
+                                             final Consumer<Component> status) throws Exception {
         String address = core.realms().joinWorld(target).getAddress();
         for (int poll = 0; poll < 6; poll++) {
             Thread.sleep(2500);
@@ -72,7 +76,7 @@ public final class JoinFlow {
                 return address; // the realm session has settled
             }
             address = next;
-            status.accept("Waiting for the realm to finish starting...");
+            status.accept(Component.translatable("realmbridge.status.settling"));
         }
         return address;
     }
@@ -87,7 +91,7 @@ public final class JoinFlow {
         core.async(() -> {
             // Back off: hammering a realm that just refused us makes it refuse harder.
             Thread.sleep(RETRY_BACKOFF_MS);
-            run(core, message -> RealmBridgeCore.LOGGER.info("[RealmBridge] {}", message));
+            run(core, RealmBridgeCore::logStatus);
         }, e -> RealmBridgeCore.LOGGER.warn("Retry failed", e));
         return true;
     }
@@ -95,12 +99,6 @@ public final class JoinFlow {
     /** Stops the retry logic from firing for unrelated disconnects. */
     public static void clear() {
         realm = null;
-    }
-
-    private static String rootMessage(Throwable e) {
-        while (e.getCause() != null) e = e.getCause();
-        final String message = e.getMessage();
-        return message == null ? e.getClass().getSimpleName() : message;
     }
 
 }
