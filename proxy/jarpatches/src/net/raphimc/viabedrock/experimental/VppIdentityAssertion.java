@@ -95,15 +95,105 @@ public final class VppIdentityAssertion {
                 return sdp;
             }
 
+            verifyKeyBinding(token, sessionKeyPair.getPublic());
             final String assertion = signFingerprints(fingerprints, (ECPrivateKey) sessionKeyPair.getPrivate());
             final String attribute = encodeIdentity(assertion, token);
-            LOGGER.log(Level.INFO, "[VP+] attached identity assertion ({0} fingerprint(s))", fingerprints.size());
-            return insertSessionAttribute(sdp, IDENTITY_PREFIX + attribute);
+            final String result = insertSessionAttribute(sdp, IDENTITY_PREFIX + attribute);
+            describe(sdp, fingerprints, assertion, token, attribute, result);
+            return result;
         } catch (Throwable e) {
             LOGGER.log(Level.WARNING, "[VP+] could not build the identity assertion; "
                     + "connecting without one (realms will refuse with CONNECTERROR 37)", e);
             return sdp;
         }
+    }
+
+    /**
+     * Dumps the shape of what we are about to send.
+     *
+     * The assertion is built from data that only exists at runtime - libwebrtc's
+     * offer, a live token - so this is the only way to see whether it looks like
+     * what a real client sends. The token is a bearer credential and is never
+     * logged: only its length and header, which is all that is diagnostic.
+     * The signaling message carries the whole SDP, so its size matters too - an
+     * identity attribute is kilobytes larger than anything else in the offer.
+     */
+    private static void describe(final String original, final List<String[]> fingerprints,
+                                 final String assertion, final String token,
+                                 final String attribute, final String result) {
+        LOGGER.log(Level.INFO, "[VP+] identity: sdp {0} -> {1} bytes, attribute {2} bytes, "
+                        + "token {3} bytes, assertion {4} bytes, {5} fingerprint(s)",
+                new Object[]{original.length(), result.length(), attribute.length(),
+                        token.length(), assertion.length(), fingerprints.size()});
+        for (final String[] fingerprint : fingerprints) {
+            LOGGER.log(Level.INFO, "[VP+] identity: signed over algorithm={0} digest={1}",
+                    new Object[]{fingerprint[0], fingerprint[1]});
+        }
+        LOGGER.log(Level.INFO, "[VP+] identity: assertion segments={0} (detached JWS needs 3, middle empty)",
+                assertion.split("\\.", -1).length);
+        try {
+            final String[] parts = token.split("\\.");
+            LOGGER.log(Level.INFO, "[VP+] identity: token header={0} segments={1}",
+                    new Object[]{new String(Base64.getUrlDecoder().decode(parts[0]), StandardCharsets.UTF_8),
+                            parts.length});
+        } catch (Throwable ignored) {
+            // header shape is a nicety, not worth failing over
+        }
+        // The offer itself is not secret - it is sent to the host verbatim - but
+        // the identity line embeds the token, so it is elided.
+        final StringBuilder redacted = new StringBuilder();
+        for (final String line : result.split("\r\n|\n|\r")) {
+            redacted.append("\n    ").append(line.startsWith(IDENTITY_PREFIX)
+                    ? IDENTITY_PREFIX + "<" + (line.length() - IDENTITY_PREFIX.length()) + " bytes elided>"
+                    : line);
+        }
+        LOGGER.log(Level.INFO, "[VP+] identity: offer SDP as sent:{0}", redacted);
+    }
+
+    /**
+     * Checks that the token really is bound to the key we sign with.
+     *
+     * The host verifies the fingerprint signature using the public key in the
+     * token's {@code cpk} claim, so if that claim is not the session key, every
+     * assertion is rejected no matter how well-formed it is. Logging the two
+     * side by side separates "our assertion is wrong" from "this account is not
+     * allowed on this realm" - both of which surface as CONNECTERROR 37.
+     */
+    private static void verifyKeyBinding(final String token, final java.security.PublicKey sessionPublicKey) {
+        try {
+            final String[] parts = token.split("\\.");
+            if (parts.length < 2) {
+                LOGGER.warning("[VP+] multiplayer token is not a JWT; cannot check key binding");
+                return;
+            }
+            final String json = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+            final JsonObject payload = GSON.fromJson(json, JsonObject.class);
+            if (payload == null || !payload.has("cpk")) {
+                LOGGER.warning("[VP+] multiplayer token has no 'cpk' claim; the host cannot bind our assertion");
+                return;
+            }
+            final String claimed = payload.get("cpk").getAsString();
+            final String ours = Base64.getEncoder().encodeToString(sessionPublicKey.getEncoded());
+            if (claimed.equals(ours)) {
+                LOGGER.info("[VP+] identity key binding OK: token cpk matches the session key");
+            } else {
+                LOGGER.warning("[VP+] token cpk does NOT match the session key we sign with"
+                        + " - either the encodings differ or the assertion cannot verify."
+                        + " cpk=" + abbreviate(claimed) + " session=" + abbreviate(ours));
+            }
+            for (final String claim : new String[]{"xuid", "sub", "iss", "exp"}) {
+                if (payload.has(claim) && !payload.get(claim).isJsonNull()) {
+                    LOGGER.log(Level.INFO, "[VP+] token {0}={1}",
+                            new Object[]{claim, payload.get(claim).getAsString()});
+                }
+            }
+        } catch (Throwable e) {
+            LOGGER.log(Level.WARNING, "[VP+] could not inspect the multiplayer token", e);
+        }
+    }
+
+    private static String abbreviate(final String value) {
+        return value.length() <= 28 ? value : value.substring(0, 28) + "...(" + value.length() + ")";
     }
 
     /** {@code a=fingerprint:<algorithm> <digest>}, deduplicated and in SDP order. */
