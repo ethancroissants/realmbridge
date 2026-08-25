@@ -26,6 +26,13 @@ import java.util.List;
  *              Adds the a=identity assertion realm hosts require. Without it the
  *              host refuses the offer with CONNECTERROR <id> 37.
  *
+ *   version    the inlined Bedrock protocol constant -> VppVersion
+ *              ViaBedrock bakes one release in as a compile-time constant, so a
+ *              realm that has updated past it answers every login with
+ *              "Outdated client!". Replacing the pushed constant with a call
+ *              keeps the stack effect identical and makes the claimed version
+ *              overridable at runtime.
+ *
  *   ice        PeerConnectionFactory.createPeerConnection -> VppIce.createPeerConnection
  *              RTCPeerConnection.setRemoteDescription    -> VppIce.setRemoteDescription
  *              Everything after the host accepts the offer happens in silence:
@@ -40,16 +47,27 @@ public final class AsmPatcher {
     private static final String IDENTITY = "net/raphimc/viabedrock/experimental/VppIdentityAssertion";
     private static final String TAP = "net/raphimc/viabedrock/experimental/VppSignalingTap";
     private static final String ICE = "net/raphimc/viabedrock/experimental/VppIce";
+    private static final String VERSION = "net/raphimc/viabedrock/experimental/VppVersion";
 
     public static void main(final String[] args) throws Exception {
         if (args.length != 2) {
-            System.err.println("usage: AsmPatcher <signaling|identity|signalingtap|ice> <class file>");
+            System.err.println("usage: AsmPatcher <signaling|identity|signalingtap|ice|version> <class file>");
             System.exit(2);
         }
         final String patch = args[0];
         final Path classFile = Path.of(args[1]);
 
+        // Constants pushed inline, replaced by a call that leaves the same value
+        // on the stack. Applied only to the classes named in the build script -
+        // 1001 is also an unrelated level-event id elsewhere in the library.
+        final List<ConstSwap> constants = "version".equals(patch)
+                ? List.of(new ConstSwap(1001, VERSION, "protocolVersion", "()I"),
+                          new ConstSwap("Bedrock 1.26.30", VERSION, "displayName", "()Ljava/lang/String;"),
+                          new ConstSwap("1.26.30", VERSION, "versionName", "()Ljava/lang/String;"))
+                : List.of();
+
         final List<Redirect> redirects = switch (patch) {
+            case "version" -> List.of();
             case "signaling" -> List.of(new Redirect(
                     Opcodes.INVOKEVIRTUAL, "com/google/gson/JsonObject", "getAsJsonArray",
                     "(Ljava/lang/String;)Lcom/google/gson/JsonArray;",
@@ -99,6 +117,35 @@ public final class AsmPatcher {
                 final MethodVisitor delegate = super.visitMethod(access, name, descriptor, signature, exceptions);
                 return new MethodVisitor(Opcodes.ASM9, delegate) {
                     @Override
+                    public void visitIntInsn(final int opcode, final int operand) {
+                        if (opcode == Opcodes.SIPUSH && swap(Integer.valueOf(operand))) {
+                            return;
+                        }
+                        super.visitIntInsn(opcode, operand);
+                    }
+
+                    @Override
+                    public void visitLdcInsn(final Object value) {
+                        if (swap(value)) {
+                            return;
+                        }
+                        super.visitLdcInsn(value);
+                    }
+
+                    /** Emits the replacement call for a matched constant. */
+                    private boolean swap(final Object value) {
+                        for (final ConstSwap constant : constants) {
+                            if (constant.value.equals(value)) {
+                                super.visitMethodInsn(Opcodes.INVOKESTATIC, constant.newOwner,
+                                        constant.newName, constant.newDescriptor, false);
+                                hits[0]++;
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+
+                    @Override
                     public void visitMethodInsn(final int opcode, final String owner, final String methodName,
                                                 final String methodDescriptor, final boolean isInterface) {
                         for (final Redirect redirect : redirects) {
@@ -129,6 +176,10 @@ public final class AsmPatcher {
 
     private record Redirect(int opcode, String owner, String name, String descriptor,
                             String newOwner, String newName, String newDescriptor) {
+    }
+
+    /** A constant pushed inline, and the call that replaces it. */
+    private record ConstSwap(Object value, String newOwner, String newName, String newDescriptor) {
     }
 
 }

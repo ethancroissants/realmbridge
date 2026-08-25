@@ -30,7 +30,7 @@ public final class BridgeAuth {
      * multiplayer token a realm host authenticates us with. It must therefore be
      * a real Bedrock version, and the same one ViaBedrock speaks.
      */
-    public static final String BEDROCK_VERSION = "1.26.30";
+    public static final String BEDROCK_VERSION = "1.26.40";
 
     private static final Gson GSON = new Gson();
     private final HttpClient httpClient = MinecraftAuth.createHttpClient("RealmBridge");
