@@ -78,23 +78,21 @@ public final class RealmBridgeClient implements ClientModInitializer {
                             return 1;
                         })))
                         // Isolation test: everything a realm join uses except NetherNet.
+                        // It deliberately does not auto-connect: the command is typed in
+                        // chat, so a world is loaded, and opening a server connection from
+                        // inside one leaves the integrated server running. Direct Connect
+                        // from the title screen instead.
                         .then(ClientCommands.literal("test")
                                 .then(ClientCommands.argument("address", StringArgumentType.greedyString()).executes(ctx -> {
                                     final String address = StringArgumentType.getString(ctx, "address").trim();
                                     this.core.async(() -> {
                                         Diagnostics.logEnvironment(this.core);
-                                        this.core.runner().ensureInstalled(m -> this.chat(m));
+                                        this.core.runner().ensureInstalled(this::chat);
                                         final int index = this.core.runner().ensureAccount(this.core.auth().serialized());
                                         this.chat(Component.literal("Bridging to Bedrock server " + address + "..."));
                                         this.core.runner().startServer(address, index);
-                                        final Minecraft minecraft = Minecraft.getInstance();
-                                        minecraft.execute(() -> net.minecraft.client.gui.screens.ConnectScreen.startConnecting(
-                                                minecraft.gui.screen(), minecraft,
-                                                net.minecraft.client.multiplayer.resolver.ServerAddress.parseString(ViaProxyRunner.BIND),
-                                                new net.minecraft.client.multiplayer.ServerData(address + " (Bedrock)",
-                                                        ViaProxyRunner.BIND,
-                                                        net.minecraft.client.multiplayer.ServerData.Type.OTHER),
-                                                false, null));
+                                        this.chat(Component.literal("Bridge is up. Quit to title, then "
+                                                + "Multiplayer -> Direct Connection -> " + ViaProxyRunner.BIND));
                                     }, this::chatError);
                                     return 1;
                                 })))
