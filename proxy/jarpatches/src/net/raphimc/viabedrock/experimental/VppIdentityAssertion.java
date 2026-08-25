@@ -114,6 +114,8 @@ public final class VppIdentityAssertion {
             final String attribute = encodeIdentity(assertion, token, issuerOf(token));
             final String result = insertSessionAttribute(sdp, IDENTITY_PREFIX + attribute);
             describe(sdp, fingerprints, assertion, token, attribute, result);
+            // Off-thread: negotiation is on a timer and must not wait for HTTPS.
+            VppIdentityCheck.verifyAsync(token, assertion, fingerprintPayload(fingerprints));
             return result;
         } catch (Throwable e) {
             LOGGER.log(Level.WARNING, "[VP+] could not build the identity assertion; "
@@ -233,8 +235,7 @@ public final class VppIdentityAssertion {
      * means the payload is omitted from the serialization (the empty middle
      * segment) - the verifier reconstructs it from the SDP it already has.
      */
-    private static String signFingerprints(final List<String[]> fingerprints, final ECPrivateKey privateKey)
-            throws Exception {
+    static String fingerprintPayload(final List<String[]> fingerprints) {
         final StringBuilder payload = new StringBuilder("{\"fingerprint\":[");
         for (int i = 0; i < fingerprints.size(); i++) {
             if (i > 0) {
@@ -244,9 +245,14 @@ public final class VppIdentityAssertion {
                     .append("\",\"digest\":\"").append(fingerprints.get(i)[1]).append("\"}");
         }
         payload.append("]}");
+        return payload.toString();
+    }
 
+    private static String signFingerprints(final List<String[]> fingerprints, final ECPrivateKey privateKey)
+            throws Exception {
+        final String payload = fingerprintPayload(fingerprints);
         final String header = B64_URL.encodeToString("{\"alg\":\"ES384\"}".getBytes(StandardCharsets.UTF_8));
-        final String body = B64_URL.encodeToString(payload.toString().getBytes(StandardCharsets.UTF_8));
+        final String body = B64_URL.encodeToString(payload.getBytes(StandardCharsets.UTF_8));
         // JOSE wants the raw r||s pair, not the DER sequence Signature emits by default.
         final Signature signature = Signature.getInstance("SHA384withECDSAinP1363Format");
         signature.initSign(privateKey);
