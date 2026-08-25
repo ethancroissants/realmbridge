@@ -100,6 +100,22 @@ public final class ViaProxyRunner {
                 .toList();
     }
 
+    /**
+     * Re-downloads the bridge, replacing whatever is installed.
+     *
+     * {@link #ensureInstalled} only fetches what is missing, so a new patched
+     * ViaProxy never reaches an existing install. That matters more than it
+     * sounds: under a sandboxed launcher the install directory lives in a mount
+     * namespace the player has no shell access to, making this the only way to
+     * put a new bridge there.
+     */
+    public void reinstall(final Consumer<Component> status) throws Exception {
+        this.stop();
+        Files.deleteIfExists(this.installDir.resolve("ViaProxy.jar"));
+        Files.deleteIfExists(this.installDir.resolve("plugins").resolve("ViaProxyPlus.jar"));
+        this.ensureInstalled(status);
+    }
+
     /** Downloads the bridge components from the RealmBridge release if missing. */
     public void ensureInstalled(final Consumer<Component> status) throws Exception {
         RealmBridgeCore.LOGGER.info("Bridge install directory: {}", this.installDir.toAbsolutePath());

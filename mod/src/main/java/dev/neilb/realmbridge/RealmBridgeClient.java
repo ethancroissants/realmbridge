@@ -96,6 +96,14 @@ public final class RealmBridgeClient implements ClientModInitializer {
                                     }, this::chatError);
                                     return 1;
                                 })))
+                        .then(ClientCommands.literal("update").executes(ctx -> {
+                            this.core.async(() -> {
+                                this.chat(Component.literal("Re-downloading the bridge..."));
+                                this.core.runner().reinstall(this::chat);
+                                this.chat(Component.literal("Bridge updated. Join the realm again."));
+                            }, this::chatError);
+                            return 1;
+                        }))
                         .then(ClientCommands.literal("stop").executes(ctx -> {
                             this.core.runner().stop();
                             this.chat(Component.literal("Bridge stopped."));
