@@ -2,6 +2,7 @@ package net.raphimc.viabedrock.experimental;
 
 import dev.kastle.webrtc.PeerConnectionFactory;
 import dev.kastle.webrtc.PeerConnectionObserver;
+import dev.kastle.webrtc.PortAllocatorConfig;
 import dev.kastle.webrtc.RTCConfiguration;
 import dev.kastle.webrtc.RTCDataChannel;
 import dev.kastle.webrtc.RTCIceCandidate;
@@ -58,6 +59,17 @@ import java.util.logging.Logger;
  *                       stream. It requires clearing PORTALLOCATOR_DISABLE_TCP,
  *                       which the library sets and which would otherwise discard
  *                       TCP relay ports before they are ever allocated.
+ *
+ * And the binding, which turned out to matter more than any of it. The library
+ * enumerates network adapters and binds each candidate's socket to one adapter's
+ * address. On a machine whose default route leaves through a tunnel - a VPN, and
+ * anything else that installs a route the adapter list does not describe - the
+ * adapter it picks is the physical one, and every packet it sends carries a source
+ * address that can never be replied to. Nothing reports this: STUN simply never
+ * answers and TURN reports only "failed to establish connection". The same machine
+ * completes a STUN round trip instantly on a socket bound to the wildcard address,
+ * which is what {@link VppNetCheck} demonstrates and what
+ * {@link #bindToAnyAddress} switches the allocator to.
  */
 public final class VppIce {
 
@@ -96,6 +108,7 @@ public final class VppIce {
             addFallbackStun(config);
             addTcpRelay(config);
             allowTcpPorts(config);
+            bindToAnyAddress(config);
             VppNetCheck.runOnce();
         } catch (Throwable e) {
             LOGGER.log(Level.WARNING, "[VP+] ice: could not prepare the ICE configuration", e);
@@ -237,6 +250,38 @@ public final class VppIce {
             config.portAllocatorConfig.setDisableTcp(false);
             LOGGER.info("[VP+] ice: enabled TCP ports so a TCP relay candidate can be allocated");
         }
+    }
+
+    /**
+     * Stops the allocator binding its sockets to one enumerated adapter.
+     *
+     * With adapter enumeration disabled libwebrtc allocates on the wildcard
+     * address instead, and the operating system chooses the source address by
+     * route - the same thing an ordinary {@code DatagramSocket} does, and the
+     * reason {@link VppNetCheck} succeeds where ICE gathers nothing. The cost is
+     * per-adapter host candidates, which are worth nothing here: a realm host is
+     * always remote, and it can only ever use the reflexive or relayed candidate.
+     *
+     * Costly-network filtering is cleared at the same time. The library enables
+     * it, and it is one of the ways a tunnel adapter gets dropped from the list
+     * before anything is bound to it at all.
+     *
+     * Set {@code -Dvpp.ice.anyaddress=false} to bind per adapter as the library does.
+     */
+    private static void bindToAnyAddress(final RTCConfiguration config) {
+        if (!Boolean.parseBoolean(System.getProperty("vpp.ice.anyaddress", "true"))) {
+            LOGGER.info("[VP+] ice: per-adapter binding kept by vpp.ice.anyaddress=false");
+            return;
+        }
+        if (config.portAllocatorConfig == null) {
+            config.portAllocatorConfig = new PortAllocatorConfig();
+        }
+        config.portAllocatorConfig
+                .setDisableAdapterEnumeration(true)
+                .setEnableAnyAddressPorts(true)
+                .setDisableCostlyNetworks(false);
+        LOGGER.info("[VP+] ice: binding candidates to the wildcard address so the route, "
+                + "not the adapter list, decides which interface they leave by");
     }
 
     /** Delegating observer that logs the parts the library discards. */

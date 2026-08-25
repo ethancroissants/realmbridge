@@ -4,8 +4,11 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.InterfaceAddress;
+import java.net.NetworkInterface;
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
@@ -55,6 +58,7 @@ public final class VppNetCheck {
     }
 
     private static void probeAll() {
+        listInterfaces();
         int reachable = 0;
         for (final InetSocketAddress server : SERVERS) {
             if (probe(server.getHostName(), server.getPort())) {
@@ -70,6 +74,48 @@ public final class VppNetCheck {
         } else {
             LOGGER.log(Level.INFO, "[VP+] netcheck: {0} of {1} STUN servers answered over UDP",
                     new Object[]{reachable, SERVERS.size()});
+        }
+    }
+
+    /**
+     * Names every interface the machine has.
+     *
+     * ICE binds per adapter, so which adapters exist - and which one carries the
+     * default route - decides whether its packets can be answered. A tunnel that
+     * the allocator never enumerated is invisible in the ICE log but obvious here.
+     */
+    private static void listInterfaces() {
+        try {
+            final Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                final NetworkInterface nic = interfaces.nextElement();
+                if (!nic.isUp() || nic.isLoopback()) {
+                    continue;
+                }
+                final StringBuilder addresses = new StringBuilder();
+                for (final InterfaceAddress address : nic.getInterfaceAddresses()) {
+                    if (addresses.length() > 0) {
+                        addresses.append(", ");
+                    }
+                    addresses.append(address.getAddress().getHostAddress());
+                }
+                LOGGER.log(Level.INFO, "[VP+] netcheck: interface {0} ({1}){2} [{3}]",
+                        new Object[]{nic.getName(), nic.getDisplayName(),
+                                nic.isPointToPoint() ? " point-to-point" : "", addresses});
+            }
+            LOGGER.log(Level.INFO, "[VP+] netcheck: default route leaves by {0}", defaultRouteAddress());
+        } catch (Throwable e) {
+            LOGGER.log(Level.WARNING, "[VP+] netcheck: could not list network interfaces", e);
+        }
+    }
+
+    /** The source address the OS picks for internet-bound traffic, without sending anything. */
+    private static String defaultRouteAddress() {
+        try (DatagramSocket socket = new DatagramSocket()) {
+            socket.connect(InetAddress.getByName("8.8.8.8"), 53);
+            return socket.getLocalAddress().getHostAddress();
+        } catch (Throwable e) {
+            return "(unknown)";
         }
     }
 
