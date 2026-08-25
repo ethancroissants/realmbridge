@@ -5,7 +5,7 @@
 # The result is fully reproducible from this repo: checkout any tag, run this.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BASE_JAR="$HERE/jars/ViaProxy-3.4.13-snapshot-b913-base.jar"
+BASE_JAR="$HERE/jars/ViaProxy-3.4.13-snapshot-b913-vb12644-base.jar"
 TARGET="$HOME/.bedrock-realm-bridge/ViaProxy.jar"
 OUT="$HERE/jarpatches/out"
 
@@ -32,13 +32,6 @@ SIGNALING_CLASS="dev/kastle/netty/channel/nethernet/signaling/NetherNetXboxRpcSi
 IDENTITY_CLASS='dev/kastle/netty/channel/nethernet/NetherNetClientChannel$2$1.class'
 # ICE runs entirely in silence once the host accepts: empty observers everywhere.
 ICE_CLASS='dev/kastle/netty/channel/nethernet/NetherNetClientChannel.class'
-# Realms update themselves past the one release ViaBedrock compiles against,
-# and every login after that is refused with "Outdated client!".
-VERSION_CLASSES=(
-  'net/raphimc/viabedrock/api/BedrockProtocolVersion.class'
-  'net/raphimc/viabedrock/protocol/provider/SkinProvider.class'
-  'net/raphimc/viaproxy/saves/impl/accounts/BedrockAccount.class'
-)
 rm -rf "$ASM_OUT" "$ASM_WORK" && mkdir -p "$ASM_OUT" "$ASM_WORK"
 javac -proc:none --release 17 -cp "$TARGET" -d "$ASM_OUT" "$HERE/tools/AsmPatcher.java"
 
@@ -59,11 +52,6 @@ java -cp "$ASM_OUT:$TARGET" AsmPatcher identity "$ASM_WORK/$IDENTITY_CLASS"
 java -cp "$ASM_OUT:$TARGET" AsmPatcher ice "$ASM_WORK/$ICE_CLASS"
 (cd "$ASM_WORK" && jar -uf "$TARGET" "$ICE_CLASS")
 
-for VERSION_CLASS in "${VERSION_CLASSES[@]}"; do
-  (cd "$ASM_WORK" && unzip -o -q "$TARGET" "$VERSION_CLASS")
-  java -cp "$ASM_OUT:$TARGET" AsmPatcher version "$ASM_WORK/$VERSION_CLASS"
-  (cd "$ASM_WORK" && jar -uf "$TARGET" "$VERSION_CLASS")
-done
 echo "Patched jar installed: $TARGET"
 echo "Patched classes:"
 (cd "$OUT" && find . -name '*.class' | sed 's|^\./|  |')

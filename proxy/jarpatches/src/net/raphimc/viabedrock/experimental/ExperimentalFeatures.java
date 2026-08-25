@@ -48,6 +48,7 @@ import net.raphimc.viabedrock.protocol.ClientboundBedrockPackets;
 import net.raphimc.viabedrock.protocol.ServerboundBedrockPackets;
 import net.raphimc.viabedrock.protocol.data.enums.Direction;
 import net.raphimc.viabedrock.protocol.data.enums.bedrock.ItemUseInventoryTransaction_TriggerType;
+import net.raphimc.viabedrock.protocol.data.enums.bedrock.*;
 import net.raphimc.viabedrock.protocol.data.enums.bedrock.generated.*;
 import net.raphimc.viabedrock.protocol.data.enums.java.generated.GameMode;
 import net.raphimc.viabedrock.protocol.data.enums.java.generated.InteractionHand;
@@ -136,13 +137,13 @@ public class ExperimentalFeatures {
                         null,
                         List.of(
                                 new InventoryActionData(
-                                        new InventorySource(InventorySourceType.WorldInteraction, ContainerID.CONTAINER_ID_NONE.getValue(), InventorySource_InventorySourceFlags.NoFlag),
+                                        new InventorySource(InventorySourceType.World_Interaction, ContainerID.CONTAINER_ID_NONE.getValue(), InventorySource_InventorySourceFlags.No_Flag),
                                         0,
                                         BedrockItem.empty(),
                                         predictedAmount
                                 ),
                                 new InventoryActionData(
-                                        new InventorySource(InventorySourceType.ContainerInventory, ContainerID.CONTAINER_ID_INVENTORY.getValue(), InventorySource_InventorySourceFlags.NoFlag),
+                                        new InventorySource(InventorySourceType.Container_Inventory, ContainerID.CONTAINER_ID_INVENTORY.getValue(), InventorySource_InventorySourceFlags.No_Flag),
                                         inventoryTracker.getInventoryContainer().getSelectedHotbarSlot(),
                                         currentItem,
                                         predictedToItem
@@ -160,7 +161,7 @@ public class ExperimentalFeatures {
                 //TODO: I think vanilla client also sends these and im not sure what their purposes are but it works without them
                     /*final PacketWrapper interactPacket = PacketWrapper.create(ServerboundBedrockPackets.INTERACT, wrapper.user());
 
-                    interactPacket.write(Types.BYTE, (byte) InteractPacket_Action.InteractUpdate.getValue());
+                    interactPacket.write(Types.BYTE, (byte) InteractPacketPayload_Action.InteractUpdate.getValue());
                     interactPacket.write(BedrockTypes.UNSIGNED_VAR_LONG, clientPlayer.runtimeId());
                     interactPacket.write(BedrockTypes.POSITION_3F, new Position3f(0, 0, 0));
 
@@ -283,7 +284,7 @@ public class ExperimentalFeatures {
                     null,
                     List.of(
                             new InventoryActionData(
-                                    new InventorySource(InventorySourceType.ContainerInventory, ContainerID.CONTAINER_ID_INVENTORY.getValue(), InventorySource_InventorySourceFlags.NoFlag),
+                                    new InventorySource(InventorySourceType.Container_Inventory, ContainerID.CONTAINER_ID_INVENTORY.getValue(), InventorySource_InventorySourceFlags.No_Flag),
                                     inventoryTracker.getInventoryContainer().getSelectedHotbarSlot(),
                                     inventoryTracker.getInventoryContainer().getSelectedHotbarItem(),
                                     predictedToItem

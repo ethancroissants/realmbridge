@@ -39,6 +39,10 @@ import net.raphimc.viabedrock.protocol.ClientboundBedrockPackets;
 import net.raphimc.viabedrock.protocol.ServerboundBedrockPackets;
 import net.raphimc.viabedrock.protocol.data.ProtocolConstants;
 import net.raphimc.viabedrock.protocol.data.enums.Direction;
+import net.raphimc.viabedrock.protocol.data.enums.bedrock.AbilitiesIndex;
+import net.raphimc.viabedrock.protocol.data.enums.bedrock.ActorFlags;
+import net.raphimc.viabedrock.protocol.data.enums.bedrock.ComplexInventoryTransaction_Type;
+import net.raphimc.viabedrock.protocol.data.enums.bedrock.*;
 import net.raphimc.viabedrock.protocol.data.enums.bedrock.generated.*;
 import net.raphimc.viabedrock.protocol.data.enums.java.*;
 import net.raphimc.viabedrock.protocol.data.enums.java.generated.*;
@@ -316,16 +320,16 @@ public class ClientPlayerPackets {
             switch (action) {
                 case START_SPRINTING -> {
                     clientPlayer.setSprinting(true);
-                    clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.StartSprinting);
+                    clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.StartSprinting);
                 }
                 case STOP_SPRINTING -> {
                     clientPlayer.setSprinting(false);
-                    clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.StopSprinting);
+                    clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.StopSprinting);
                 }
                 case START_FALL_FLYING -> {
                     if (ViaBedrock.getConfig().shouldEnableExperimentalFeatures()) {
                         clientPlayer.setGliding(true);
-                        clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.StartGliding);
+                        clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.StartGliding);
                     }
                 }
                 default -> throw new IllegalStateException("Unhandled PlayerCommandAction: " + action);
@@ -504,7 +508,7 @@ public class ClientPlayerPackets {
                     clientPlayer.position().x(), clientPlayer.position().y(), clientPlayer.position().z()); // VP+ history
 
             if (prevOnGround && clientPlayer.inputFlags().contains(InputFlag.JUMP)) {
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.StartJumping);
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.StartJumping);
             }
 
             if (clientPlayer.isGliding() && (
@@ -515,7 +519,7 @@ public class ClientPlayerPackets {
                     clientPlayer.entityFlags().contains(ActorFlags.IN_SCAFFOLDING)
             )) {
                 clientPlayer.setGliding(false);
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.StopGliding);
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.StopGliding);
             }
 
             if (!clientPlayer.isInitiallySpawned() || clientPlayer.isDead()) {
@@ -523,53 +527,53 @@ public class ClientPlayerPackets {
                 return;
             }
 
-            clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.BlockBreakingDelayEnabled);
+            clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.BlockBreakingDelayEnabled);
             if (clientPlayer.isOnGround()) {
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.VerticalCollision);
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.VerticalCollision);
             }
             if (clientPlayer.horizontalCollision()) {
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.HorizontalCollision);
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.HorizontalCollision);
             }
             if (clientPlayer.inputFlags().contains(InputFlag.FORWARD)) {
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.Up);
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.Up);
             }
             if (clientPlayer.inputFlags().contains(InputFlag.BACKWARD)) {
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.Down);
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.Down);
             }
             if (clientPlayer.inputFlags().contains(InputFlag.LEFT)) {
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.Left);
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.Left);
             }
             if (clientPlayer.inputFlags().contains(InputFlag.RIGHT)) {
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.Right);
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.Right);
             }
             if (clientPlayer.inputFlags().contains(InputFlag.JUMP)) {
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.JumpDown, PlayerAuthInputPacket_InputData.Jumping, PlayerAuthInputPacket_InputData.WantUp, PlayerAuthInputPacket_InputData.JumpCurrentRaw);
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.JumpDown, PlayerAuthInputPacketPayload_InputData.Jumping, PlayerAuthInputPacketPayload_InputData.WantUp, PlayerAuthInputPacketPayload_InputData.JumpCurrentRaw);
             }
             if (clientPlayer.inputFlags().contains(InputFlag.SHIFT)) {
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.SneakDown, PlayerAuthInputPacket_InputData.Sneaking, PlayerAuthInputPacket_InputData.WantDown, PlayerAuthInputPacket_InputData.SneakCurrentRaw);
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.SneakDown, PlayerAuthInputPacketPayload_InputData.Sneaking, PlayerAuthInputPacketPayload_InputData.WantDown, PlayerAuthInputPacketPayload_InputData.SneakCurrentRaw);
             }
             if (clientPlayer.inputFlags().contains(InputFlag.SPRINT) || clientPlayer.isSprinting()) {
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.SprintDown, PlayerAuthInputPacket_InputData.Sprinting);
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.SprintDown, PlayerAuthInputPacketPayload_InputData.Sprinting);
             }
             if (clientPlayer.inputFlags().contains(InputFlag.JUMP) && !prevInputFlags.contains(InputFlag.JUMP)) {
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.JumpPressedRaw);
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.JumpPressedRaw);
             }
             if (prevInputFlags.contains(InputFlag.JUMP) && !clientPlayer.inputFlags().contains(InputFlag.JUMP)) {
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.JumpReleasedRaw);
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.JumpReleasedRaw);
             }
             if (clientPlayer.inputFlags().contains(InputFlag.SPRINT) && !prevInputFlags.contains(InputFlag.SPRINT)) {
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.StartSprinting); // VP+: server needs the transition to apply sprint speed
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.StartSprinting); // VP+: server needs the transition to apply sprint speed
             }
             if (prevInputFlags.contains(InputFlag.SPRINT) && !clientPlayer.inputFlags().contains(InputFlag.SPRINT)) {
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.StopSprinting); // VP+
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.StopSprinting); // VP+
             }
             if (clientPlayer.inputFlags().contains(InputFlag.SHIFT) && !prevInputFlags.contains(InputFlag.SHIFT)) {
                 clientPlayer.setSneaking(true);
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.SneakPressedRaw, PlayerAuthInputPacket_InputData.StartSneaking);
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.SneakPressedRaw, PlayerAuthInputPacketPayload_InputData.StartSneaking);
             }
             if (prevInputFlags.contains(InputFlag.SHIFT) && !clientPlayer.inputFlags().contains(InputFlag.SHIFT)) {
                 clientPlayer.setSneaking(false);
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.SneakReleasedRaw, PlayerAuthInputPacket_InputData.StopSneaking);
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.SneakReleasedRaw, PlayerAuthInputPacketPayload_InputData.StopSneaking);
             }
 
             final Position3f positionDelta = clientPlayer.position().subtract(prevPosition);
@@ -599,30 +603,42 @@ public class ClientPlayerPackets {
             wrapper.write(BedrockTypes.POSITION_3F, clientPlayer.position()); // position
             wrapper.write(BedrockTypes.POSITION_2F, MathUtil.calculateMovementDirections(clientPlayer.authInputData(), clientPlayer.isSneaking())); // move vector
             wrapper.write(BedrockTypes.FLOAT_LE, clientPlayer.rotation().z()); // head yaw
-            wrapper.write(BedrockTypes.UNSIGNED_VAR_BIG_INTEGER, EnumUtil.getBigBitmaskFromEnumSet(clientPlayer.authInputData(), PlayerAuthInputPacket_InputData::getValue)); // input flags
+            wrapper.write(Types.BOOLEAN, true); // input flags present
+            wrapper.write(BedrockTypes.UNSIGNED_VAR_INT, clientPlayer.authInputData().size()); // input flags count
+            for (PlayerAuthInputPacketPayload_InputData inputData : PlayerAuthInputPacketPayload_InputData.values()) {
+                if (clientPlayer.authInputData().contains(inputData)) {
+                    wrapper.write(BedrockTypes.VAR_INT, inputData.getValue()); // input flag
+                }
+            }
             wrapper.write(BedrockTypes.UNSIGNED_VAR_INT, InputMode.Mouse.getValue()); // input mode
             wrapper.write(BedrockTypes.UNSIGNED_VAR_INT, ClientPlayMode.Screen.getValue()); // play mode
-            wrapper.write(BedrockTypes.UNSIGNED_VAR_INT, NewInteractionModel.Touch.getValue()); // interaction mode
+            wrapper.write(BedrockTypes.VAR_INT, NewInteractionModel.Touch.getValue()); // interaction mode
             wrapper.write(BedrockTypes.FLOAT_LE, clientPlayer.rotation().x()); // interact pitch
             wrapper.write(BedrockTypes.FLOAT_LE, clientPlayer.rotation().y()); // interact yaw
             wrapper.write(BedrockTypes.UNSIGNED_VAR_LONG, (long) clientPlayer.age()); // tick
             wrapper.write(BedrockTypes.POSITION_3F, velocity); // delta
-            if (clientPlayer.authInputData().contains(PlayerAuthInputPacket_InputData.PerformBlockActions)) {
+            wrapper.write(Types.BOOLEAN, true); // item interaction optional reflected
+            wrapper.write(Types.BOOLEAN, false); // no item interaction
+            wrapper.write(Types.BOOLEAN, true); // item stack request optional reflected
+            wrapper.write(Types.BOOLEAN, false); // no item stack request
+            wrapper.write(Types.BOOLEAN, true); // block actions optional reflected
+            final boolean hasBlockActions = clientPlayer.authInputData().contains(PlayerAuthInputPacketPayload_InputData.PerformBlockActions);
+            wrapper.write(Types.BOOLEAN, hasBlockActions);
+            if (hasBlockActions) {
                 ViaBedrock.getPlatform().getLogger().log(java.util.logging.Level.INFO, "[VP+ diag] sending "
                         + clientPlayer.authInputBlockActions().size() + " block action(s): "
                         + clientPlayer.authInputBlockActions().stream().map(a -> a.action().name()).toList());
-                wrapper.write(BedrockTypes.VAR_INT, clientPlayer.authInputBlockActions().size()); // player block actions count
+                wrapper.write(BedrockTypes.UNSIGNED_VAR_INT, clientPlayer.authInputBlockActions().size()); // player block actions count
                 for (ClientPlayerEntity.AuthInputBlockAction blockAction : clientPlayer.authInputBlockActions()) {
                     wrapper.write(BedrockTypes.VAR_INT, blockAction.action().getValue()); // action
-                    switch (blockAction.action()) {
-                        // StopDestroyBlock does not have additional data even tho bedrock protocol docs claim it does
-                        case StartDestroyBlock, AbortDestroyBlock, CrackBlock, PredictDestroyBlock, ContinueDestroyBlock -> {
-                            wrapper.write(BedrockTypes.BLOCK_POSITION, blockAction.position()); // position
-                            wrapper.write(BedrockTypes.VAR_INT, blockAction.direction()); // facing
-                        }
-                    }
+                    wrapper.write(BedrockTypes.BLOCK_POSITION, blockAction.position() != null ? blockAction.position() : new BlockPosition(0, 0, 0)); // position
+                    wrapper.write(BedrockTypes.VAR_INT, blockAction.direction()); // facing
                 }
             }
+            wrapper.write(Types.BOOLEAN, true); // vehicle rotation optional reflected
+            wrapper.write(Types.BOOLEAN, false); // not in predicted vehicle
+            wrapper.write(Types.BOOLEAN, true); // predicted vehicle id optional reflected
+            wrapper.write(Types.BOOLEAN, false); // not in predicted vehicle
             Position2f vppAnalog = new Position2f(0F, 0F);
             final Position2f vppKeyed = MathUtil.calculateMovementDirections(clientPlayer.authInputData(), clientPlayer.isSneaking());
             if (vppKeyed.x() == 0F && vppKeyed.y() == 0F) {
@@ -655,7 +671,7 @@ public class ClientPlayerPackets {
             final boolean flying = (flags & AbilitiesFlag.FLYING.getBit()) != 0;
             if (flying != clientPlayer.abilities().getBooleanValue(AbilitiesIndex.Flying)) {
                 clientPlayer.abilities().getOrCreateCacheLayer().setAbility(AbilitiesIndex.Flying, flying);
-                clientPlayer.addAuthInputData(flying ? PlayerAuthInputPacket_InputData.StartFlying : PlayerAuthInputPacket_InputData.StopFlying);
+                clientPlayer.addAuthInputData(flying ? PlayerAuthInputPacketPayload_InputData.StartFlying : PlayerAuthInputPacketPayload_InputData.StopFlying);
             }
         });
         protocol.registerServerbound(ServerboundPackets26_1.CHANGE_GAME_MODE, ServerboundBedrockPackets.SET_PLAYER_GAME_TYPE, new PacketHandlers() {
@@ -697,7 +713,7 @@ public class ClientPlayerPackets {
                     clientPlayer.addAuthInputBlockAction(new ClientPlayerEntity.AuthInputBlockAction(PlayerActionType.CrackBlock, blockBreakingInfo.position(), blockBreakingInfo.direction().ordinal()));
                 }
             } else {
-                clientPlayer.addAuthInputData(PlayerAuthInputPacket_InputData.MissedSwing);
+                clientPlayer.addAuthInputData(PlayerAuthInputPacketPayload_InputData.MissedSwing);
             }
         });
     }

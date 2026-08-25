@@ -12,7 +12,7 @@ import net.raphimc.viabedrock.experimental.model.inventory.InventoryTransactionD
 import net.raphimc.viabedrock.experimental.rewriter.InventoryTransactionRewriter;
 import net.raphimc.viabedrock.protocol.BedrockProtocol;
 import net.raphimc.viabedrock.protocol.ServerboundBedrockPackets;
-import net.raphimc.viabedrock.protocol.data.enums.bedrock.generated.ComplexInventoryTransaction_Type;
+import net.raphimc.viabedrock.protocol.data.enums.bedrock.ComplexInventoryTransaction_Type;
 import net.raphimc.viabedrock.protocol.data.enums.bedrock.generated.ContainerID;
 import net.raphimc.viabedrock.protocol.data.enums.bedrock.generated.InventorySourceType;
 import net.raphimc.viabedrock.protocol.data.enums.bedrock.generated.InventorySource_InventorySourceFlags;
@@ -260,14 +260,14 @@ public final class VppInventoryClicks {
         final List<InventoryActionData> actions = new ArrayList<>(changes.size() + 1);
         for (final Change change : changes) {
             actions.add(new InventoryActionData(
-                    new InventorySource(InventorySourceType.ContainerInventory,
-                            change.container().containerId(), InventorySource_InventorySourceFlags.NoFlag),
+                    new InventorySource(InventorySourceType.Container_Inventory,
+                            change.container().containerId(), InventorySource_InventorySourceFlags.No_Flag),
                     change.slot(), change.from(), change.to()));
         }
         if (droppedItem != null && !droppedItem.isEmpty()) { // the world receives the dropped stack
             actions.add(new InventoryActionData(
-                    new InventorySource(InventorySourceType.WorldInteraction,
-                            ContainerID.CONTAINER_ID_NONE.getValue(), InventorySource_InventorySourceFlags.NoFlag),
+                    new InventorySource(InventorySourceType.World_Interaction,
+                            ContainerID.CONTAINER_ID_NONE.getValue(), InventorySource_InventorySourceFlags.No_Flag),
                     0, BedrockItem.empty(), droppedItem));
         }
         for (final Change change : changes) { // apply after snapshotting the "from" items
