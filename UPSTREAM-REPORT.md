@@ -85,6 +85,50 @@ a=max-message-size:262144
 
 Total signaling message 2,291 bytes.
 
+## Full signaling trace
+
+Captured by tapping `TextWebSocketFrame.text()` and `Gson.toJson` in
+`NetherNetXboxRpcSignaling` (identity attribute redacted):
+
+```
+--> Signaling_TurnAuth_v1_0
+<-- result: TurnAuthServers [stun|turn:relay.communication.microsoft.com:3478]
+--> Signaling_SendClientMessage_v1_0  toPlayerId=<realm session uuid>
+      inner: {"params":{"netherNetId":"3599995095199873320",
+              "message":"CONNECTREQUEST 5087569416665908099 <offer sdp>"},
+              "method":"Signaling_WebRtc_v1_0"}
+--> CANDIDATEADD  host 192.168.0.83
+--> CANDIDATEADD  host <ipv6>
+--> CANDIDATEADD  srflx 24.0.159.127
+<-- result: null            (service accepted every send)
+<-- Signaling_ReceiveMessage_v1_0  From=<realm session uuid>
+      Signaling_DeliveryNotification_V1_0 for our CANDIDATEADD messages
+<-- Signaling_ReceiveMessage_v1_0  From=<realm session uuid>
+      {"params":{"netherNetId":"<realm session uuid>",
+       "message":"CONNECTERROR 5087569416665908099 37"}}
+```
+
+The realm host **acknowledges delivery of our messages** before refusing, so it
+is live and processing the exchange - the refusal is a decision, not a timeout
+or a lost message.
+
+The identity attribute decoded off the wire is exactly:
+
+```
+{"assertion":{"fingerprints":"<detached ES384 JWS, header {\"alg\":\"ES384\"}>",
+              "token":"<RS256 JWT>"},
+ "idp":{"domain":"https://authorization.franchise.minecraft-services.net/",
+        "protocol":"default"}}
+```
+
+Token claims: `xid`, `xname`, `aud`, `sub`, `cpk`, `iss`, `exp`, `iat`,
+`ap` (=7), `ipt` (=`PlayFab`), `mid`, `pfcd`, `tid`.
+
+One incidental observation: the send-ack for the CONNECTREQUEST (~3 KB) comes
+back *after* the acks for the much smaller CANDIDATEADD messages, so the host may
+see candidates for a connection it has not opened yet. Trickle ICE is enabled
+(`a=ice-options:trickle`). We have not tested with it disabled.
+
 ## Questions
 
 1. Do realm hosts now require an `a=identity` assertion on the offer? If so,

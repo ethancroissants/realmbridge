@@ -29,6 +29,14 @@ public final class VppSignalingTap {
     private static final Logger LOGGER = Logger.getLogger("ViaProxyPlus");
     /** A JWT: three base64url runs, the first of which is a JSON header. */
     private static final String JWT = "eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]+";
+    /**
+     * The identity attribute, as it appears both raw and JSON-escaped.
+     *
+     * The offer is carried as a string inside a JSON-RPC envelope, so by the
+     * time it reaches the socket every '=' is "\u003d" - matching only the raw
+     * form let the token through in the one place it actually mattered.
+     */
+    private static final String IDENTITY = "a(?:=|\\\\u003d)identity:[A-Za-z0-9+/=]+(?:\\\\u003d)*";
 
     private VppSignalingTap() {
     }
@@ -60,9 +68,10 @@ public final class VppSignalingTap {
         if (text == null) {
             return "(null)";
         }
-        String safe = text.replaceAll(JWT, "<jwt redacted>");
-        // The identity attribute is base64 of JSON that contains the token.
-        safe = safe.replaceAll("a=identity:[A-Za-z0-9+/=]+", "a=identity:<redacted>");
+        // Identity first: it is base64 of JSON wrapping the token, so redacting
+        // the attribute as a whole is what actually removes the credential.
+        String safe = text.replaceAll(IDENTITY, "a=identity:<redacted>");
+        safe = safe.replaceAll(JWT, "<jwt redacted>");
         return safe;
     }
 
