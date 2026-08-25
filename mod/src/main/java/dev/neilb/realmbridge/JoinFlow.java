@@ -51,7 +51,7 @@ public final class JoinFlow {
             status.accept(attempt > 1
                     ? Component.translatable("realmbridge.status.waking_attempt", name, attempt)
                     : Component.translatable("realmbridge.status.waking", name));
-            final String address = awaitStableAddress(core, target, status);
+            final String address = resolveOnce(core, target);
             // Hand ViaProxy the account only now: resolving the realm above forces
             // the Microsoft tokens to refresh, and stale ones make the realm host
             // reject the connection with CONNECTERROR 37 (identity verification).
@@ -71,26 +71,24 @@ public final class JoinFlow {
                 RealmBridgeCore.rootMessage(e))));
     }
 
-    /** Polls the Realms API until the session address stops changing. */
-    private static String awaitStableAddress(final RealmBridgeCore core, final RealmsServer target,
-                                             final Consumer<Component> status) throws Exception {
-        final RealmsJoinInformation first = core.realms().joinWorld(target);
-        Diagnostics.logJoin(target, first);
-        String address = first.getAddress();
-        for (int poll = 0; poll < 6; poll++) {
-            Thread.sleep(2500);
-            final RealmsJoinInformation info = core.realms().joinWorld(target);
-            final String next = info.getAddress();
-            if (next.equals(address)) {
-                RealmBridgeCore.LOGGER.info("Realm session settled on {} after {} poll(s)", address, poll + 1);
-                return address; // the realm session has settled
-            }
-            RealmBridgeCore.LOGGER.info("Realm session moved {} -> {}, still starting", address, next);
-            Diagnostics.logJoin(target, info);
-            address = next;
-            status.accept(Component.translatable("realmbridge.status.settling"));
-        }
-        return address;
+    /**
+     * Resolves the realm session exactly once.
+     *
+     * This used to poll joinWorld until the address stopped changing, to ride
+     * out a realm that answers before its host has registered with signaling.
+     * But every call is the client telling Realms "I am joining now", and a real
+     * Bedrock client says that once. Between the poll loop and the bridge
+     * plugin's own refresh we were saying it four or five times per attempt,
+     * which is behaviour no real client produces.
+     *
+     * The plugin re-resolves immediately before the WebRTC connect anyway, so
+     * this value only has to be good enough to decide whether a running bridge
+     * can be reused.
+     */
+    private static String resolveOnce(final RealmBridgeCore core, final RealmsServer target) throws Exception {
+        final RealmsJoinInformation join = core.realms().joinWorld(target);
+        Diagnostics.logJoin(target, join);
+        return join.getAddress();
     }
 
     /**
