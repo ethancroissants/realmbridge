@@ -92,6 +92,9 @@ public final class ViaProxyRunner {
      */
     public List<String> failureLines() {
         return this.logTail(400).stream()
+                // Our own diagnostics quote these markers back; reporting them as
+                // the failure reason turns the chat line into nonsense.
+                .filter(line -> !line.contains("[VP+] check:"))
                 .filter(line -> line.contains("CONNECTERROR")
                         || line.contains("SIGNAL_CONNECT_ERROR")
                         || line.contains("PROXY KICK")
