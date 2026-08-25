@@ -14,6 +14,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.Util;
 import net.raphimc.minecraftauth.extra.realms.model.RealmsServer;
+import net.raphimc.minecraftauth.extra.realms.service.impl.BedrockRealmsService;
 import net.raphimc.minecraftauth.msa.model.MsaDeviceCode;
 
 import java.net.URI;
@@ -315,7 +316,9 @@ public final class RealmBridgeScreen extends Screen {
         this.loadRequested = true;
         this.busy = true;
         this.core.async(() -> {
-            final List<RealmsServer> loaded = this.core.realms().getWorlds();
+            final BedrockRealmsService service = this.core.realms();
+            final List<RealmsServer> loaded = service.getWorlds();
+            Diagnostics.logRealms(service, loaded);
             this.realms = loaded;
             this.busy = false;
             this.loadRequested = false;

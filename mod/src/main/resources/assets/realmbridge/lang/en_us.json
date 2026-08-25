@@ -44,5 +44,6 @@
   "realmbridge.status.downloading": "Downloading the bridge (~45 MB, one time)...",
   "realmbridge.status.downloading_plugin": "Downloading the bridge plugin...",
   "realmbridge.status.starting": "Starting the bridge...",
-  "realmbridge.status.failed": "Failed: %s"
+  "realmbridge.status.failed": "Failed: %s",
+  "realmbridge.status.refused": "The realm refused the connection: %s"
 }

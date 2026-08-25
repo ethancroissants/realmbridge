@@ -7,8 +7,11 @@ import com.google.gson.JsonObject;
 
 import net.minecraft.network.chat.Component;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
@@ -19,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -33,6 +37,7 @@ public final class ViaProxyRunner {
     /** Bridge artifacts are published here by .github/workflows/build.yml. */
     private static final String RELEASE_BASE = "https://github.com/ethancroissants/realmbridge/releases/latest/download/";
     private static final String BEDROCK_ACCOUNT_TYPE = "net.raphimc.viaproxy.saves.impl.accounts.BedrockAccount";
+    private static final String LOG_NAME = "realmbridge-viaproxy.log";
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
 
     private final Path installDir = Path.of(System.getProperty("user.home"), ".bedrock-realm-bridge");
@@ -51,8 +56,51 @@ public final class ViaProxyRunner {
         Files.writeString(filter, realmName, StandardCharsets.UTF_8);
     }
 
+    /** Absolute path of the bridge install, logs included. */
+    public Path installDir() {
+        return this.installDir;
+    }
+
+    /**
+     * The tail of the bridge's own log.
+     *
+     * ViaProxy's kick reason never reaches the game - the client just sees
+     * "Could not connect to the backend server!" - and under a sandboxed
+     * launcher (Flatpak/Snap) this file lives in a mount namespace the user
+     * cannot even reach from a shell. So the mod reads it back itself.
+     */
+    public List<String> logTail(final int maxLines) {
+        final Path log = this.installDir.resolve("logs").resolve(LOG_NAME);
+        try {
+            if (!Files.exists(log)) {
+                return List.of();
+            }
+            final List<String> lines = Files.readAllLines(log, StandardCharsets.UTF_8);
+            return lines.size() <= maxLines ? lines : lines.subList(lines.size() - maxLines, lines.size());
+        } catch (Exception e) {
+            RealmBridgeCore.LOGGER.warn("Could not read {}", log, e);
+            return List.of();
+        }
+    }
+
+    /**
+     * The lines from {@link #logTail} that explain a refused connection, most
+     * recent last. Kept to the handful of markers ViaProxy and the NetherNet
+     * stack use when a realm host turns us away.
+     */
+    public List<String> failureLines() {
+        return this.logTail(400).stream()
+                .filter(line -> line.contains("CONNECTERROR")
+                        || line.contains("SIGNAL_CONNECT_ERROR")
+                        || line.contains("PROXY KICK")
+                        || line.contains("signaling rejection")
+                        || line.contains("Realm auto-refresh failed"))
+                .toList();
+    }
+
     /** Downloads the bridge components from the RealmBridge release if missing. */
     public void ensureInstalled(final Consumer<Component> status) throws Exception {
+        RealmBridgeCore.LOGGER.info("Bridge install directory: {}", this.installDir.toAbsolutePath());
         Files.createDirectories(this.installDir.resolve("plugins"));
         final Path jar = this.installDir.resolve("ViaProxy.jar");
         if (!Files.exists(jar)) {
@@ -153,16 +201,17 @@ public final class ViaProxyRunner {
                 "--auth-method", "ACCOUNT",
                 "--minecraft-account-index", String.valueOf(accountIndex));
         builder.directory(this.installDir.toFile());
-        builder.redirectOutput(this.installDir.resolve("logs").resolve("realmbridge-viaproxy.log").toFile());
         builder.redirectErrorStream(true);
+        RealmBridgeCore.LOGGER.info("Starting bridge: {}", String.join(" ", builder.command()));
         this.process = builder.start();
         this.currentTarget = netherNetAddress;
+        this.pumpOutput(this.process);
 
         final long deadline = System.currentTimeMillis() + 60_000;
         while (System.currentTimeMillis() < deadline) {
             if (!this.process.isAlive()) {
                 throw new IllegalStateException("ViaProxy exited with code " + this.process.exitValue()
-                        + " (see logs/realmbridge-viaproxy.log)");
+                        + " (see " + this.installDir.resolve("logs").resolve(LOG_NAME) + ")");
             }
             try (Socket socket = new Socket()) {
                 socket.connect(new InetSocketAddress("127.0.0.1", 25568), 500);
@@ -173,6 +222,39 @@ public final class ViaProxyRunner {
         }
         this.stop();
         throw new IllegalStateException("ViaProxy did not open " + BIND + " within 60s");
+    }
+
+    /**
+     * Mirrors the bridge's console output into the Minecraft log, line by line,
+     * as well as to its own file.
+     *
+     * Piping rather than {@code redirectOutput} is deliberate: under a sandboxed
+     * launcher the log file sits in a mount namespace the player cannot open, so
+     * the game log is the only copy they can actually read. Every line is worth
+     * having - the interesting ones (a NetherNet CONNECTERROR, a signaling
+     * rejection) are exactly the ones that never reach the client otherwise.
+     */
+    private void pumpOutput(final Process bridge) {
+        final Path logFile = this.installDir.resolve("logs").resolve(LOG_NAME);
+        final Thread pump = new Thread(() -> {
+            try (BufferedReader reader = new BufferedReader(
+                         new InputStreamReader(bridge.getInputStream(), StandardCharsets.UTF_8));
+                 BufferedWriter file = Files.newBufferedWriter(logFile, StandardCharsets.UTF_8)) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    RealmBridgeCore.LOGGER.info("[bridge] {}", line);
+                    file.write(line);
+                    file.newLine();
+                    file.flush(); // a crash must not cost us the last lines
+                }
+            } catch (IOException e) {
+                RealmBridgeCore.LOGGER.warn("Bridge output stream ended", e);
+            }
+            RealmBridgeCore.LOGGER.info("[bridge] process ended with exit code {}",
+                    bridge.isAlive() ? "(still running)" : String.valueOf(bridge.exitValue()));
+        }, "RealmBridge-BridgeLog");
+        pump.setDaemon(true);
+        pump.start();
     }
 
     /**
