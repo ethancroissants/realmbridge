@@ -39,8 +39,8 @@ public final class RealmBridgeScreen extends Screen {
     private static final int CONTENT_WIDTH = 308;
     private static final int BUTTON_WIDTH = 200;
     private static final int BUTTON_HEIGHT = 20;
-    /** Three of these plus the layout spacing fill the content column. */
-    private static final int FOOTER_BUTTON_WIDTH = 96;
+    /** Four of these plus the layout spacing fill the content column. */
+    private static final int FOOTER_BUTTON_WIDTH = 71;
     private static final int ROW_SPACING = 8;
     /** Header + footer bands, the invite row and the status line. */
     private static final int CHROME_HEIGHT = 44 + 40 + 28 + 40;
@@ -122,7 +122,7 @@ public final class RealmBridgeScreen extends Screen {
         content.addChild(Button.builder(Component.translatable("realmbridge.signin.button"), b -> this.signIn())
                 .size(BUTTON_WIDTH, BUTTON_HEIGHT).build()).active = !this.busy;
         this.addStatus(content);
-        footer.addChild(this.backButton());
+        this.commonFooter(footer);
     }
 
     /**
@@ -163,14 +163,14 @@ public final class RealmBridgeScreen extends Screen {
                 expiryLine(code).withStyle(ChatFormatting.DARK_GRAY), this.font));
 
         this.addStatus(content);
-        footer.addChild(this.backButton());
+        this.commonFooter(footer);
     }
 
     private void buildLoading(final LinearLayout content, final LinearLayout footer) {
         content.addChild(new StringWidget(CONTENT_WIDTH, this.font.lineHeight,
                 Component.translatable("realmbridge.realms.loading").withStyle(ChatFormatting.GRAY), this.font));
         this.addStatus(content);
-        footer.addChild(this.backButton());
+        this.commonFooter(footer);
     }
 
     private void buildRealmList(final LinearLayout content, final LinearLayout footer,
@@ -223,7 +223,7 @@ public final class RealmBridgeScreen extends Screen {
         signOut.active = !this.busy;
         footer.addChild(signOut);
 
-        footer.addChild(this.backButton());
+        this.commonFooter(footer);
     }
 
     // --------------------------------------------------------------- widgets
@@ -231,6 +231,21 @@ public final class RealmBridgeScreen extends Screen {
     private Button backButton() {
         return Button.builder(CommonComponents.GUI_BACK, b -> this.onClose())
                 .size(FOOTER_BUTTON_WIDTH, BUTTON_HEIGHT).build();
+    }
+
+    /**
+     * Debug and Back, on every state.
+     *
+     * Debug has to be reachable when signed out and right after a failed join,
+     * which is exactly when the chat commands it replaces cannot be typed.
+     */
+    private void commonFooter(final LinearLayout footer) {
+        footer.addChild(Button.builder(Component.translatable("realmbridge.debug.button"),
+                        b -> this.minecraft.gui.setScreen(new RealmBridgeDebugScreen(this, this.core)))
+                .size(FOOTER_BUTTON_WIDTH, BUTTON_HEIGHT)
+                .tooltip(Tooltip.create(Component.translatable("realmbridge.debug.button.tooltip")))
+                .build());
+        footer.addChild(this.backButton());
     }
 
     private Button realmButton(final RealmsServer realm) {

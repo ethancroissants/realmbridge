@@ -111,6 +111,16 @@ public final class BridgeAuth {
     }
 
     /**
+     * The {@code Authorization} header the Realms API expects, for calls
+     * MinecraftAuth does not wrap.
+     */
+    public String realmsAuthorizationHeader() throws Exception {
+        return this.authManager(code -> {
+            throw new IllegalStateException("Not signed in");
+        }).getRealmsXstsToken().getUpToDate().getAuthorizationHeader();
+    }
+
+    /**
      * Who the mod is actually signed in as, for the log.
      *
      * The Microsoft account behind the device-code sign-in has nothing to do

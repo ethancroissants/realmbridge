@@ -96,6 +96,21 @@ public final class RealmBridgeClient implements ClientModInitializer {
                                     }, this::chatError);
                                     return 1;
                                 })))
+                        .then(ClientCommands.literal("invites").executes(ctx -> {
+                            this.core.async(() -> {
+                                this.chat(Component.literal("Checking pending realm invites (see the log)..."));
+                                Diagnostics.auditInvites(this.core);
+                                this.chat(Component.literal("Invite audit written to the log."));
+                            }, this::chatError);
+                            return 1;
+                        }).then(ClientCommands.argument("accept", StringArgumentType.word()).executes(ctx -> {
+                            final String id = StringArgumentType.getString(ctx, "accept");
+                            this.core.async(() -> {
+                                Diagnostics.acceptInvite(this.core, id);
+                                this.chat(Component.literal("Tried to accept invitation " + id + "; see the log."));
+                            }, this::chatError);
+                            return 1;
+                        })))
                         .then(ClientCommands.literal("update").executes(ctx -> {
                             this.core.async(() -> {
                                 this.chat(Component.literal("Re-downloading the bridge..."));

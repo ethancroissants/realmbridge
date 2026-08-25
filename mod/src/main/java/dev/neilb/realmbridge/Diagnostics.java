@@ -99,6 +99,43 @@ public final class Diagnostics {
         }
     }
 
+    /**
+     * Probes the invite endpoints and accepts anything still pending.
+     *
+     * A realm reports {@code member: false} until its invitation is accepted by
+     * the invited account, and nothing else in the API distinguishes the two -
+     * the realm is listed, resolves a session, and only the host refuses. The
+     * paths differ between editions and are undocumented, so each candidate is
+     * tried and the raw response logged either way.
+     */
+    public static void auditInvites(final RealmBridgeCore core) {
+        final RealmsApi api = new RealmsApi(core.auth());
+        RealmBridgeCore.LOGGER.info("--- RealmBridge invite audit ---");
+        for (final String path : new String[]{"/invites/pending", "/invites/count/pending", "/invites"}) {
+            try {
+                RealmBridgeCore.LOGGER.info("  GET {} -> {}", path, api.get(path));
+            } catch (Exception e) {
+                RealmBridgeCore.LOGGER.warn("  GET {} failed: {}", path, RealmBridgeCore.rootMessage(e));
+            }
+        }
+    }
+
+    /** Accepts one pending invitation by its id. */
+    public static void acceptInvite(final RealmBridgeCore core, final String invitationId) {
+        final RealmsApi api = new RealmsApi(core.auth());
+        for (final String path : new String[]{"/invites/accept/" + invitationId, "/invites/v1/accept/" + invitationId}) {
+            try {
+                final RealmsApi.Response response = api.put(path);
+                RealmBridgeCore.LOGGER.info("  PUT {} -> {}", path, response);
+                if (response.ok()) {
+                    return;
+                }
+            } catch (Exception e) {
+                RealmBridgeCore.LOGGER.warn("  PUT {} failed: {}", path, RealmBridgeCore.rootMessage(e));
+            }
+        }
+    }
+
     /** The session the realm handed back, which is what the bridge dials. */
     public static void logJoin(final RealmsServer realm, final RealmsJoinInformation join) {
         RealmBridgeCore.LOGGER.info("Join info for '{}': address={} protocol={}",

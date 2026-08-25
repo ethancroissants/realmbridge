@@ -37,6 +37,11 @@ javac -proc:none --release 17 -cp "$TARGET" -d "$ASM_OUT" "$HERE/tools/AsmPatche
 java -cp "$ASM_OUT:$TARGET" AsmPatcher signaling "$ASM_WORK/$SIGNALING_CLASS"
 (cd "$ASM_WORK" && jar -uf "$TARGET" "$SIGNALING_CLASS")
 
+# Re-extract: the signaling class already carries the patch above.
+(cd "$ASM_WORK" && rm -f "$SIGNALING_CLASS" && unzip -o -q "$TARGET" "$SIGNALING_CLASS")
+java -cp "$ASM_OUT:$TARGET" AsmPatcher signalingtap "$ASM_WORK/$SIGNALING_CLASS"
+(cd "$ASM_WORK" && jar -uf "$TARGET" "$SIGNALING_CLASS")
+
 (cd "$ASM_WORK" && unzip -o -q "$TARGET" "$IDENTITY_CLASS")
 java -cp "$ASM_OUT:$TARGET" AsmPatcher identity "$ASM_WORK/$IDENTITY_CLASS"
 (cd "$ASM_WORK" && jar -uf "$TARGET" "$IDENTITY_CLASS")

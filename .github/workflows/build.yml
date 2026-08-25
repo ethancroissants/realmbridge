@@ -36,7 +36,9 @@ jobs:
           keys = set(json.load(open(lang)))
           used = set()
           for f in glob.glob('src/main/java/**/*.java', recursive=True):
-              used |= set(re.findall(r'translatable\(\s*"([^"]+)"', open(f).read()))
+              # Keys also reach Component.translatable through helper parameters,
+              # so match any realmbridge-shaped literal rather than call sites.
+              used |= set(re.findall(r'"(realmbridge\.[A-Za-z0-9_.]+)"', open(f).read()))
           missing = sorted(used - keys)
           unused = sorted(keys - used)
           for k in missing:

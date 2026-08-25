@@ -6,6 +6,7 @@ import org.objectweb.asm.Opcodes;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * Redirects a static or virtual call inside a shipped class to a replacement in
@@ -29,25 +30,36 @@ public final class AsmPatcher {
 
     private static final String COMPAT = "net/raphimc/viabedrock/experimental/VppSignalingCompat";
     private static final String IDENTITY = "net/raphimc/viabedrock/experimental/VppIdentityAssertion";
+    private static final String TAP = "net/raphimc/viabedrock/experimental/VppSignalingTap";
 
     public static void main(final String[] args) throws Exception {
         if (args.length != 2) {
-            System.err.println("usage: AsmPatcher <signaling|identity> <class file>");
+            System.err.println("usage: AsmPatcher <signaling|identity|signalingtap> <class file>");
             System.exit(2);
         }
         final String patch = args[0];
         final Path classFile = Path.of(args[1]);
 
-        final Redirect redirect = switch (patch) {
-            case "signaling" -> new Redirect(
+        final List<Redirect> redirects = switch (patch) {
+            case "signaling" -> List.of(new Redirect(
                     Opcodes.INVOKEVIRTUAL, "com/google/gson/JsonObject", "getAsJsonArray",
                     "(Ljava/lang/String;)Lcom/google/gson/JsonArray;",
                     COMPAT, "paramsAsArray",
-                    "(Lcom/google/gson/JsonObject;Ljava/lang/String;)Lcom/google/gson/JsonArray;");
-            case "identity" -> new Redirect(
+                    "(Lcom/google/gson/JsonObject;Ljava/lang/String;)Lcom/google/gson/JsonArray;"));
+            case "identity" -> List.of(new Redirect(
                     Opcodes.INVOKESTATIC, "dev/kastle/netty/channel/nethernet/NetherNetConstants",
                     "buildSignalConnectRequest", "(JLjava/lang/String;)Ljava/lang/String;",
-                    IDENTITY, "buildSignalConnectRequest", "(JLjava/lang/String;)Ljava/lang/String;");
+                    IDENTITY, "buildSignalConnectRequest", "(JLjava/lang/String;)Ljava/lang/String;"));
+            // Both directions of the signaling socket, so a refusal can be read
+            // in the context of the conversation that produced it.
+            case "signalingtap" -> List.of(
+                    new Redirect(Opcodes.INVOKEVIRTUAL,
+                            "io/netty/handler/codec/http/websocketx/TextWebSocketFrame", "text",
+                            "()Ljava/lang/String;", TAP, "inbound",
+                            "(Lio/netty/handler/codec/http/websocketx/TextWebSocketFrame;)Ljava/lang/String;"),
+                    new Redirect(Opcodes.INVOKEVIRTUAL, "com/google/gson/Gson", "toJson",
+                            "(Lcom/google/gson/JsonElement;)Ljava/lang/String;", TAP, "outbound",
+                            "(Lcom/google/gson/Gson;Lcom/google/gson/JsonElement;)Ljava/lang/String;"));
             default -> throw new IllegalArgumentException("unknown patch: " + patch);
         };
 
@@ -64,14 +76,16 @@ public final class AsmPatcher {
                     @Override
                     public void visitMethodInsn(final int opcode, final String owner, final String methodName,
                                                 final String methodDescriptor, final boolean isInterface) {
-                        if (opcode == redirect.opcode
-                                && redirect.owner.equals(owner)
-                                && redirect.name.equals(methodName)
-                                && redirect.descriptor.equals(methodDescriptor)) {
-                            super.visitMethodInsn(Opcodes.INVOKESTATIC, redirect.newOwner, redirect.newName,
-                                    redirect.newDescriptor, false);
-                            hits[0]++;
-                            return;
+                        for (final Redirect redirect : redirects) {
+                            if (opcode == redirect.opcode
+                                    && redirect.owner.equals(owner)
+                                    && redirect.name.equals(methodName)
+                                    && redirect.descriptor.equals(methodDescriptor)) {
+                                super.visitMethodInsn(Opcodes.INVOKESTATIC, redirect.newOwner, redirect.newName,
+                                        redirect.newDescriptor, false);
+                                hits[0]++;
+                                return;
+                            }
                         }
                         super.visitMethodInsn(opcode, owner, methodName, methodDescriptor, isInterface);
                     }
