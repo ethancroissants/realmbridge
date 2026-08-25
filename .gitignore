@@ -2,3 +2,8 @@ dist/
 
 .DS_Store
 **/.DS_Store
+
+# The bridge base jar is assembled from the upstream revisions pinned in
+# proxy/upstream.properties; rebuild-base-jar.sh recreates it on demand.
+proxy/jars/base.jar
+proxy/jars/.work/

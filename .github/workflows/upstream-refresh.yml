@@ -1,0 +1,190 @@
+name: upstream-refresh
+
+# Track ViaProxy and ViaBedrock, and rebuild the bridge when either moves.
+#
+# ViaBedrock is where Bedrock protocol support actually lives, and realms update
+# themselves the moment Mojang ships a release. When the bridge falls behind, the
+# realm refuses every login outright ("Outdated client!"), so staying current is
+# not a nicety - it is the difference between the mod working and not.
+#
+# Nothing is published unless the rebuilt bridge passes the smoke test, and the
+# forked sources are re-merged rather than carried forward blindly, because a
+# stale fork silently reinstates old protocol handling.
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Rebuild even if upstream has not moved'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: upstream-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Track upstream and rebuild
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ViaBedrock targets Java 17 and the patch sources compile with --release
+      # 17; 21 builds both and is what the pipeline is validated against.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Resolve the latest upstream revisions
+        id: upstream
+        run: |
+          ci=$(grep -E '^viaproxy_ci=' proxy/upstream.properties | cut -d= -f2-)
+          repo=$(grep -E '^viabedrock_repo=' proxy/upstream.properties | cut -d= -f2-)
+          ref=$(grep -E '^viabedrock_ref=' proxy/upstream.properties | cut -d= -f2-)
+
+          latest_build=$(curl -fsSg "$ci/api/json?tree=lastSuccessfulBuild%5Bnumber%5D" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["lastSuccessfulBuild"]["number"])')
+          latest_commit=$(git ls-remote "$repo" "refs/heads/$ref" | cut -f1)
+          [ -n "$latest_build" ] && [ -n "$latest_commit" ] \
+            || { echo "::error::could not resolve upstream revisions"; exit 1; }
+
+          pinned_build=$(grep -E '^viaproxy_build=' proxy/upstream.properties | cut -d= -f2-)
+          pinned_commit=$(grep -E '^viabedrock_commit=' proxy/upstream.properties | cut -d= -f2-)
+
+          echo "ViaProxy   pinned=$pinned_build   latest=$latest_build"
+          echo "ViaBedrock pinned=${pinned_commit:0:12} latest=${latest_commit:0:12} ($ref)"
+
+          {
+            echo "build=$latest_build"
+            echo "commit=$latest_commit"
+            echo "ref=$ref"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ "$pinned_build" = "$latest_build" ] && [ "$pinned_commit" = "$latest_commit" ] \
+             && [ "${{ inputs.force }}" != "true" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Already current; nothing to do."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A fork carried onto a new upstream revision without merging still
+      # compiles and still loads - it just quietly undoes upstream's protocol
+      # changes. Conflicts stop here on purpose.
+      - name: Re-merge the forked ViaBedrock sources
+        id: merge
+        if: steps.upstream.outputs.changed == 'true'
+        run: ./proxy/merge-forks.sh "${{ steps.upstream.outputs.commit }}"
+
+      - name: Pin the ViaProxy build
+        if: steps.upstream.outputs.changed == 'true'
+        run: |
+          sed -i -E "s|^viaproxy_build=.*|viaproxy_build=${{ steps.upstream.outputs.build }}|" \
+            proxy/upstream.properties
+          echo "--- proxy/upstream.properties ---"
+          grep -vE '^\s*(#|$)' proxy/upstream.properties
+
+      - name: Rebuild the bridge
+        if: steps.upstream.outputs.changed == 'true'
+        run: |
+          ./proxy/rebuild-base-jar.sh --force
+          ./proxy/build-patched-jar.sh
+          ./proxy/build.sh
+
+      - name: Smoke test
+        if: steps.upstream.outputs.changed == 'true'
+        run: ./proxy/smoke-test.sh
+
+      - name: Build every artifact
+        if: steps.upstream.outputs.changed == 'true'
+        run: |
+          ./cli/make-dist.sh > /dev/null
+          (cd mod && ./gradlew build --no-daemon -q)
+          mkdir -p dist
+          cp "$HOME/.bedrock-realm-bridge/ViaProxy.jar" dist/ViaProxy-patched.jar
+          cp "$HOME/.bedrock-realm-bridge/plugins/ViaProxyPlus.jar" dist/
+          cp cli/dist/bedrock-realm-bridge-*.tar.gz dist/bedrock-realm-bridge.tar.gz
+          cp mod/build/libs/realmbridge-*.jar dist/
+          ls -lh dist
+
+      - name: Resolve version
+        id: version
+        if: steps.upstream.outputs.changed == 'true'
+        run: |
+          v=$(grep -E '^mod_version=' mod/gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          echo "value=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Commit the new pins
+        if: steps.upstream.outputs.changed == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add proxy/upstream.properties proxy/jarpatches/src
+          if git diff --cached --quiet; then
+            echo "Nothing changed in the working tree."
+          else
+            git commit -m "Track upstream: ViaProxy ${{ steps.upstream.outputs.build }}, ViaBedrock ${{ steps.upstream.outputs.commit }}
+
+          Rebuilt the bridge against the latest upstream revisions and re-merged the
+          forked ViaBedrock sources. Smoke test passed."
+            git push
+          fi
+
+      # Published from here rather than by build.yml: a push made with
+      # GITHUB_TOKEN deliberately does not trigger other workflows, so waiting
+      # for build.yml would leave releases/latest pointing at the old bridge -
+      # which is the exact thing this workflow exists to prevent.
+      - name: Publish the refreshed bridge
+        if: steps.upstream.outputs.changed == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.value }}
+          name: RealmBridge v${{ steps.version.outputs.value }}
+          make_latest: true
+          files: dist/*
+          fail_on_unmatched_files: true
+
+      - name: Report a broken refresh
+        if: failure() && steps.upstream.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Upstream refresh failed: ViaBedrock ${{ steps.upstream.outputs.commit }}"
+          # One issue per broken revision; re-running should not pile them up.
+          if gh issue list --state open --search "$title in:title" --json number \
+               | grep -q '"number"'; then
+            echo "An open issue already covers this revision."
+            exit 0
+          fi
+          gh issue create --title "$title" --body "$(cat <<EOF
+          The nightly upstream refresh could not produce a working bridge.
+
+          | | |
+          |---|---|
+          | ViaProxy build | \`${{ steps.upstream.outputs.build }}\` |
+          | ViaBedrock ref | \`${{ steps.upstream.outputs.ref }}\` |
+          | ViaBedrock commit | \`${{ steps.upstream.outputs.commit }}\` |
+          | Run | ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} |
+
+          Nothing was pushed or published, so the current release is untouched.
+
+          The usual cause is a forked source under \`proxy/jarpatches/src\` conflicting
+          with upstream changes. To resolve locally:
+
+          \`\`\`
+          ./proxy/merge-forks.sh ${{ steps.upstream.outputs.commit }}
+          # fix the files left with conflict markers, then
+          ./proxy/rebuild-base-jar.sh --force && ./proxy/build-patched-jar.sh && ./proxy/smoke-test.sh
+          \`\`\`
+          EOF
+          )"

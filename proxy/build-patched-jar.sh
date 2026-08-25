@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
-# Rebuild the patched ViaProxy.jar from the clean base jar + jarpatches/src,
-# and install it to ~/.bedrock-realm-bridge/ViaProxy.jar.
+# Rebuild the patched ViaProxy.jar from the base jar + jarpatches/src, and
+# install it to ~/.bedrock-realm-bridge/ViaProxy.jar.
 #
 # The result is fully reproducible from this repo: checkout any tag, run this.
+# The base jar itself is a build artifact rather than a committed binary - it is
+# assembled from the upstream revisions pinned in upstream.properties, so
+# "which upstream is this built from" is answerable by reading a text file.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BASE_JAR="$HERE/jars/ViaProxy-3.4.13-snapshot-b913-vb12644-base.jar"
+BASE_JAR="$HERE/jars/base.jar"
 TARGET="$HOME/.bedrock-realm-bridge/ViaProxy.jar"
 OUT="$HERE/jarpatches/out"
 
-[[ -f "$BASE_JAR" ]] || { echo "base jar missing: $BASE_JAR"; exit 1; }
+[[ -f "$BASE_JAR" ]] || "$HERE/rebuild-base-jar.sh"
 
 rm -rf "$OUT" && mkdir -p "$OUT"
 javac -proc:none --release 17 -cp "$BASE_JAR" -d "$OUT" \

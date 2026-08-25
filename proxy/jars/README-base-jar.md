@@ -1,26 +1,36 @@
-# Base jar provenance
+# The bridge base jar
 
-`ViaProxy-3.4.13-snapshot-b913-vb12644-base.jar`
+`base.jar` in this directory is a **build artifact, not a source file**. It is
+gitignored and rebuilt on demand by `../rebuild-base-jar.sh` from the upstream
+revisions pinned in `../upstream.properties`.
 
-ViaProxy CI build **b913** (`git-ViaProxy-3.4.13-SNAPSHOT:c4e6ea9`), with the
-bundled ViaBedrock replaced by a build of **RaphiMC/ViaBedrock `update/1.26.40`**
-at commit `0e87f93` (2026-08-19T08:35:50+02:00), which targets **Bedrock 1.26.44, protocol 2168**.
+    ./proxy/rebuild-base-jar.sh            # build it if missing
+    ./proxy/rebuild-base-jar.sh --force    # rebuild from scratch
 
-The stock b913 bundles ViaBedrock from `main`, which is still Bedrock 1.26.30 /
-protocol 1001. Realms have updated past that, and a 1001 client is refused at
-login with `LOGIN_FAILED_CLIENT_OLD` ("Outdated client!"), so the stock jar
-cannot reach a realm at all.
+## What it is
 
-Rebuild:
+ViaProxy, taken as a prebuilt CI artifact, with its bundled **ViaBedrock**
+replaced by a build of the pinned ViaBedrock revision.
 
-    git clone --branch update/1.26.40 https://github.com/RaphiMC/ViaBedrock
-    cd ViaBedrock && ./gradlew build
-    # replace net/raphimc/viabedrock/** and assets/viabedrock/** in the b913 jar
+That replacement is the whole reason this file exists. ViaProxy CI builds bundle
+ViaBedrock from `main`, which trails the Bedrock release realms actually run.
+A client claiming an older protocol is refused at login with
+`LOGIN_FAILED_CLIENT_OLD` - "Outdated client!" - so a stock ViaProxy jar cannot
+reach a realm at all until upstream catches up.
 
-Both projects declare the same artifact version (`ViaBedrock:0.0.29-SNAPSHOT`),
-so this is a drop-in swap; the only build.gradle difference between `main` and
-the update branch is a `compileOnly` guava version, which does not apply at
-runtime.
+## When upstream catches up
 
-Drop this file and the swap once the update branch is merged and ViaProxy CI
-ships a build that bundles it.
+Once the ViaBedrock update branch merges and a ViaProxy CI build bundles it,
+this splice becomes redundant:
+
+1. point `viabedrock_ref` at `main` in `upstream.properties`, or
+2. drop the ViaBedrock half of `rebuild-base-jar.sh` entirely and use the CI
+   artifact unmodified.
+
+The forked sources under `../jarpatches/src` still need re-merging either way -
+see `../merge-forks.sh`.
+
+## Staying current
+
+`.github/workflows/upstream-refresh.yml` checks both upstreams daily, re-merges
+the forks, rebuilds, smoke tests, and publishes only if all of that passes.

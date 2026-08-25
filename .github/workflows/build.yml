@@ -80,18 +80,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The patch sources compile with --release 17 against the ViaProxy jar;
-      # a modern JDK is fine and matches the mod job.
+      # The patch sources compile with --release 17, and this job also builds
+      # ViaBedrock from source, which targets 17. 21 covers both.
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '25'
+          java-version: '21'
+
+      # The base jar is assembled from the upstream revisions pinned in
+      # proxy/upstream.properties rather than committed, so it is cached against
+      # those pins instead of being rebuilt on every run.
+      - name: Cache the upstream base jar
+        uses: actions/cache@v4
+        with:
+          path: proxy/jars/base.jar
+          key: base-jar-${{ hashFiles('proxy/upstream.properties') }}
+
+      - name: Build the base jar from pinned upstream
+        run: ./proxy/rebuild-base-jar.sh
 
       - name: Patch ViaProxy
         run: ./proxy/build-patched-jar.sh
 
       - name: Build ViaProxyPlus
         run: ./proxy/build.sh
+
+      # A jar can pass the patch step and still be broken: ViaBedrock spliced in
+      # from source may not link against the ViaVersion the proxy bundles. That
+      # only shows up when something actually starts the proxy.
+      - name: Smoke test the patched bridge
+        run: ./proxy/smoke-test.sh
 
       - name: Build the portable CLI bundle
         run: ./cli/make-dist.sh
