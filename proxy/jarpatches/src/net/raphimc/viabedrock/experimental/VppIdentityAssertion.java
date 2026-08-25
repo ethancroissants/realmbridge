@@ -56,9 +56,23 @@ public final class VppIdentityAssertion {
     private static final Logger LOGGER = Logger.getLogger("ViaProxyPlus");
     private static final Gson GSON = new Gson();
     private static final Base64.Encoder B64_URL = Base64.getUrlEncoder().withoutPadding();
-    private static final String IDP_DOMAIN = "https://authorization.franchise.minecraft-services.net";
+    /** Fallback only. The real value is read from the token's own 'iss' claim. */
+    private static final String IDP_DOMAIN = "https://authorization.franchise.minecraft-services.net/";
     private static final String FINGERPRINT_PREFIX = "a=fingerprint:";
     private static final String IDENTITY_PREFIX = "a=identity:";
+
+    static {
+        // Bridge builds are published under whatever the mod version happens to
+        // be, so a log cannot otherwise say which patch set produced it.
+        try (java.io.InputStream in = VppIdentityAssertion.class.getResourceAsStream("/vpp-build.txt")) {
+            if (in != null) {
+                LOGGER.log(Level.INFO, "[VP+] patched bridge build {0}",
+                        new String(in.readAllBytes(), StandardCharsets.UTF_8).trim());
+            }
+        } catch (Throwable ignored) {
+            // a missing stamp is not worth a warning
+        }
+    }
 
     private VppIdentityAssertion() {
     }
@@ -97,7 +111,7 @@ public final class VppIdentityAssertion {
 
             verifyKeyBinding(token, sessionKeyPair.getPublic());
             final String assertion = signFingerprints(fingerprints, (ECPrivateKey) sessionKeyPair.getPrivate());
-            final String attribute = encodeIdentity(assertion, token);
+            final String attribute = encodeIdentity(assertion, token, issuerOf(token));
             final String result = insertSessionAttribute(sdp, IDENTITY_PREFIX + attribute);
             describe(sdp, fingerprints, assertion, token, attribute, result);
             return result;
@@ -121,6 +135,7 @@ public final class VppIdentityAssertion {
     private static void describe(final String original, final List<String[]> fingerprints,
                                  final String assertion, final String token,
                                  final String attribute, final String result) {
+        LOGGER.log(Level.INFO, "[VP+] identity: idp.domain={0}", issuerOf(token));
         LOGGER.log(Level.INFO, "[VP+] identity: sdp {0} -> {1} bytes, attribute {2} bytes, "
                         + "token {3} bytes, assertion {4} bytes, {5} fingerprint(s)",
                 new Object[]{original.length(), result.length(), attribute.length(),
@@ -239,12 +254,42 @@ public final class VppIdentityAssertion {
         return header + ".." + B64_URL.encodeToString(signature.sign());
     }
 
-    private static String encodeIdentity(final String fingerprintAssertion, final String token) {
+    /**
+     * The issuer that actually minted this token, taken from its own {@code iss}
+     * claim rather than hardcoded.
+     *
+     * {@code idp.domain} tells the host where to fetch the keys to verify the
+     * token, and OIDC issuer matching is an exact string comparison - the live
+     * claim is {@code https://authorization.franchise.minecraft-services.net/},
+     * with a trailing slash that the obvious constant does not have. Reading it
+     * back from the token means the two can never disagree, whatever Microsoft
+     * changes it to.
+     */
+    private static String issuerOf(final String token) {
+        try {
+            final String[] parts = token.split("\\.");
+            if (parts.length >= 2) {
+                final JsonObject payload = GSON.fromJson(
+                        new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8), JsonObject.class);
+                if (payload != null && payload.has("iss") && !payload.get("iss").isJsonNull()) {
+                    final String issuer = payload.get("iss").getAsString();
+                    if (!issuer.isEmpty()) {
+                        return issuer;
+                    }
+                }
+            }
+        } catch (Throwable e) {
+            LOGGER.log(Level.WARNING, "[VP+] could not read the token issuer; falling back to the default", e);
+        }
+        return IDP_DOMAIN;
+    }
+
+    private static String encodeIdentity(final String fingerprintAssertion, final String token, final String issuer) {
         final JsonObject assertion = new JsonObject();
         assertion.addProperty("fingerprints", fingerprintAssertion);
         assertion.addProperty("token", token);
         final JsonObject idp = new JsonObject();
-        idp.addProperty("domain", IDP_DOMAIN);
+        idp.addProperty("domain", issuer);
         idp.addProperty("protocol", "default");
         final JsonObject identity = new JsonObject();
         identity.add("assertion", assertion);

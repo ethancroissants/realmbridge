@@ -16,8 +16,12 @@ javac -proc:none --release 17 -cp "$BASE_JAR" -d "$OUT" \
   $(find "$HERE/jarpatches/src" -name '*.java')
 
 mkdir -p "$(dirname "$TARGET")"
+# Stamp the build so any log can name the bridge that produced it.
+printf '%s %s\n' "$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null || echo unknown)" \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$OUT/vpp-build.txt"
+
 cp "$BASE_JAR" "$TARGET"
-(cd "$OUT" && jar -uf "$TARGET" $(find . -name '*.class'))
+(cd "$OUT" && jar -uf "$TARGET" $(find . -name '*.class') vpp-build.txt)
 
 echo "==> bytecode patches"
 ASM_OUT="$HERE/jarpatches/asm-out"
