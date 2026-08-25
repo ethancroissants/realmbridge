@@ -70,6 +70,27 @@ public final class BridgeAuth {
         return BedrockAuthManager.toJson(this.authManager);
     }
 
+    /**
+     * Who the mod is actually signed in as, for the log.
+     *
+     * The Microsoft account behind the device-code sign-in has nothing to do
+     * with the Java account the game is launched with, so "signed in" is not
+     * the same as "signed in as the person who was invited to the realm".
+     * The XUID here is directly comparable to a realm's {@code ownerUUID}.
+     */
+    public synchronized String identity() {
+        if (this.authManager == null) {
+            return "not loaded";
+        }
+        try {
+            final var chain = this.authManager.getMinecraftCertificateChain().getUpToDate();
+            return chain.getIdentityDisplayName() + " (xuid=" + chain.getIdentityXuid()
+                    + ", uuid=" + chain.getIdentityUuid() + ")";
+        } catch (Exception e) {
+            return "unavailable: " + RealmBridgeCore.rootMessage(e);
+        }
+    }
+
     public synchronized void logout() throws Exception {
         this.authManager = null;
         Files.deleteIfExists(this.authFile);

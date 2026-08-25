@@ -77,6 +77,27 @@ public final class RealmBridgeClient implements ClientModInitializer {
                             this.playCommand(StringArgumentType.getString(ctx, "name"));
                             return 1;
                         })))
+                        // Isolation test: everything a realm join uses except NetherNet.
+                        .then(ClientCommands.literal("test")
+                                .then(ClientCommands.argument("address", StringArgumentType.greedyString()).executes(ctx -> {
+                                    final String address = StringArgumentType.getString(ctx, "address").trim();
+                                    this.core.async(() -> {
+                                        Diagnostics.logEnvironment(this.core);
+                                        this.core.runner().ensureInstalled(m -> this.chat(m));
+                                        final int index = this.core.runner().ensureAccount(this.core.auth().serialized());
+                                        this.chat(Component.literal("Bridging to Bedrock server " + address + "..."));
+                                        this.core.runner().startServer(address, index);
+                                        final Minecraft minecraft = Minecraft.getInstance();
+                                        minecraft.execute(() -> net.minecraft.client.gui.screens.ConnectScreen.startConnecting(
+                                                minecraft.gui.screen(), minecraft,
+                                                net.minecraft.client.multiplayer.resolver.ServerAddress.parseString(ViaProxyRunner.BIND),
+                                                new net.minecraft.client.multiplayer.ServerData(address + " (Bedrock)",
+                                                        ViaProxyRunner.BIND,
+                                                        net.minecraft.client.multiplayer.ServerData.Type.OTHER),
+                                                false, null));
+                                    }, this::chatError);
+                                    return 1;
+                                })))
                         .then(ClientCommands.literal("stop").executes(ctx -> {
                             this.core.runner().stop();
                             this.chat(Component.literal("Bridge stopped."));

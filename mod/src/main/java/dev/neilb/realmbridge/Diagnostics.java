@@ -48,6 +48,7 @@ public final class Diagnostics {
                 core.runner().installDir().resolve("logs").resolve("realmbridge-viaproxy.log").toAbsolutePath());
         RealmBridgeCore.LOGGER.info("  claimed as:    Bedrock {}", BridgeAuth.BEDROCK_VERSION);
         RealmBridgeCore.LOGGER.info("  signed in:     {}", core.auth().isLoggedIn());
+        RealmBridgeCore.LOGGER.info("  xbox identity: {}", core.auth().identity());
         RealmBridgeCore.LOGGER.info("  bridge live:   {}", core.runner().isRunning());
     }
 
@@ -71,6 +72,30 @@ public final class Diagnostics {
                     realm.getId(), realm.getNameOr("?"), realm.getState(),
                     realm.isCompatible(), realm.isExpired(), realm.getActiveVersionOr("?"));
             RealmBridgeCore.LOGGER.info("    raw: {}", realm.getRawResponse());
+            warnOnAccess(realm);
+        }
+    }
+
+    /**
+     * Calls out the response fields that decide whether the realm host will let
+     * this account in at all. A realm can be listed, OPEN and unexpired and
+     * still refuse the connection, and the reason shows up here rather than in
+     * anything the connection itself reports.
+     */
+    private static void warnOnAccess(final RealmsServer realm) {
+        final var raw = realm.getRawResponse();
+        final boolean member = raw.has("member") && !raw.get("member").isJsonNull()
+                && raw.get("member").getAsBoolean();
+        final String owner = raw.has("ownerUUID") && !raw.get("ownerUUID").isJsonNull()
+                ? raw.get("ownerUUID").getAsString() : "?";
+        RealmBridgeCore.LOGGER.info("    access: member={} ownerUUID={} defaultPermission={}",
+                member, owner,
+                raw.has("defaultPermission") && !raw.get("defaultPermission").isJsonNull()
+                        ? raw.get("defaultPermission").getAsString() : "?");
+        if (!member) {
+            RealmBridgeCore.LOGGER.warn("    member=false: this account either owns the realm, or its "
+                    + "invite was never accepted. If the XUID above is not {}, you are signed in as "
+                    + "someone else and the realm host will refuse the connection.", owner);
         }
     }
 

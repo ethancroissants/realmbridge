@@ -24,6 +24,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 /**
  * Manages the headless ViaProxy bridge. Fully self-bootstrapping: downloads
@@ -38,6 +39,7 @@ public final class ViaProxyRunner {
     private static final String RELEASE_BASE = "https://github.com/ethancroissants/realmbridge/releases/latest/download/";
     private static final String BEDROCK_ACCOUNT_TYPE = "net.raphimc.viaproxy.saves.impl.accounts.BedrockAccount";
     private static final String LOG_NAME = "realmbridge-viaproxy.log";
+    private static final Pattern ANSI = Pattern.compile("\u001B\\[[;\\d]*[ -/]*[@-~]");
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
 
     private final Path installDir = Path.of(System.getProperty("user.home"), ".bedrock-realm-bridge");
@@ -168,13 +170,31 @@ public final class ViaProxyRunner {
         return index;
     }
 
-    /** Launches ViaProxy cli (blocking until the port is up; call off-thread). */
+    /** Launches the bridge against a realm's NetherNet session. */
     public synchronized void start(final String netherNetAddress, final int accountIndex) throws Exception {
-        if (this.isRunning() && netherNetAddress.equals(this.currentTarget)) {
+        this.startTarget("nethernet-rpc://" + netherNetAddress, netherNetAddress, accountIndex);
+    }
+
+    /**
+     * Launches the bridge against a plain Bedrock server instead of a realm.
+     *
+     * Only useful for telling two failures apart: a realm join exercises auth,
+     * the Realms API, NetherNet signaling and the protocol translation all at
+     * once, and when it fails there is nothing to say which of them broke. A
+     * RakNet server uses everything except NetherNet, so if it connects, the
+     * fault is in the realm path specifically.
+     */
+    public synchronized void startServer(final String hostAndPort, final int accountIndex) throws Exception {
+        this.startTarget(hostAndPort, hostAndPort, accountIndex);
+    }
+
+    private synchronized void startTarget(final String targetAddress, final String targetKey,
+                                          final int accountIndex) throws Exception {
+        if (this.isRunning() && targetKey.equals(this.currentTarget)) {
             // Already bridging this exact realm session: reuse it. Respawning would
             // abandon the established signaling session, and the realm host starts
             // refusing connections (CONNECTERROR) when those pile up.
-            RealmBridgeCore.LOGGER.info("Reusing the running bridge for {}", netherNetAddress);
+            RealmBridgeCore.LOGGER.info("Reusing the running bridge for {}", targetKey);
             return;
         }
         if (this.isRunning()) {
@@ -196,7 +216,7 @@ public final class ViaProxyRunner {
         final ProcessBuilder builder = new ProcessBuilder(
                 javaBin, "-jar", this.installDir.resolve("ViaProxy.jar").toString(), "cli",
                 "--bind-address", BIND,
-                "--target-address", "nethernet-rpc://" + netherNetAddress,
+                "--target-address", targetAddress,
                 "--target-version", "Bedrock " + BridgeAuth.BEDROCK_VERSION,
                 "--auth-method", "ACCOUNT",
                 "--minecraft-account-index", String.valueOf(accountIndex));
@@ -204,7 +224,7 @@ public final class ViaProxyRunner {
         builder.redirectErrorStream(true);
         RealmBridgeCore.LOGGER.info("Starting bridge: {}", String.join(" ", builder.command()));
         this.process = builder.start();
-        this.currentTarget = netherNetAddress;
+        this.currentTarget = targetKey;
         this.pumpOutput(this.process);
 
         final long deadline = System.currentTimeMillis() + 60_000;
@@ -242,6 +262,9 @@ public final class ViaProxyRunner {
                  BufferedWriter file = Files.newBufferedWriter(logFile, StandardCharsets.UTF_8)) {
                 String line;
                 while ((line = reader.readLine()) != null) {
+                    // ViaProxy colours its console; the escapes are noise in a log file
+                    // and make the reason lines painful to read when pasted anywhere.
+                    line = ANSI.matcher(line).replaceAll("");
                     RealmBridgeCore.LOGGER.info("[bridge] {}", line);
                     file.write(line);
                     file.newLine();
