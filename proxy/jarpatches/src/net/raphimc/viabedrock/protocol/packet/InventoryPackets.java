@@ -860,6 +860,39 @@ public class InventoryPackets {
         });
         protocol.registerClientbound(ClientboundBedrockPackets.CREATIVE_CONTENT, null, wrapper -> {
             wrapper.cancel();
+
+            // VP+ TEMPORARY: capture the raw payload instead of parsing it.
+            //
+            // On a 1.26.44 realm this packet desyncs the item reader and the
+            // resulting exception drops the whole connection. The layout that
+            // changed cannot be worked out from any public reference - the only
+            // way to find it is to look at the bytes a real realm sends, and this
+            // bridge is the only thing positioned to see them.
+            //
+            // Capturing also happens to be the safe behaviour: no parse, no
+            // exception, the session survives without creative items. Delete this
+            // block once the reader matches 1.26.44 and let the parse below run.
+            if (Boolean.parseBoolean(System.getProperty("vpp.capture.creative", "true"))) {
+                final byte[] vppPayload = wrapper.read(Types.REMAINING_BYTES);
+                final int vppShow = Math.min(vppPayload.length, 192);
+                final StringBuilder vppHex = new StringBuilder();
+                final StringBuilder vppAscii = new StringBuilder();
+                for (int vppI = 0; vppI < vppShow; vppI++) {
+                    vppHex.append(String.format("%02X", vppPayload[vppI]));
+                    if ((vppI & 15) == 15) {
+                        vppHex.append('\n');
+                    } else {
+                        vppHex.append(' ');
+                    }
+                    final char vppC = (char) (vppPayload[vppI] & 0xFF);
+                    vppAscii.append(vppC >= 32 && vppC < 127 ? vppC : '.');
+                }
+                ViaBedrock.getPlatform().getLogger().log(Level.WARNING,
+                        "[VP+ capture] CREATIVE_CONTENT payload " + vppPayload.length + " bytes, first "
+                                + vppShow + ":\n" + vppHex + "\nascii: " + vppAscii);
+                return;
+            }
+
             final ItemRewriter itemRewriter = wrapper.user().get(ItemRewriter.class);
 
             final int groupCount = wrapper.read(BedrockTypes.UNSIGNED_VAR_INT); // group count
