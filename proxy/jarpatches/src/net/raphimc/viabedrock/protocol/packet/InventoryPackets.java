@@ -442,6 +442,32 @@ public class InventoryPackets {
         containerSetData.send(BedrockProtocol.class);
     }
 
+    /**
+     * Reads the creative items the server offers.
+     *
+     * @throws RuntimeException If the packet doesn't have the expected layout
+     */
+    private static void readCreativeContent(final PacketWrapper wrapper) {
+        final ItemRewriter itemRewriter = wrapper.user().get(ItemRewriter.class);
+
+        final int groupCount = wrapper.read(BedrockTypes.UNSIGNED_VAR_INT); // group count
+        for (int i = 0; i < groupCount; i++) {
+            wrapper.read(Types.UNSIGNED_BYTE); // category
+            wrapper.read(BedrockTypes.STRING); // category name
+            wrapper.read(itemRewriter.itemTypeWithoutNetId()); // icon
+        }
+
+        final int itemCount = wrapper.read(BedrockTypes.UNSIGNED_VAR_INT); // item count
+        final Map<Integer, BedrockItem> creativeItems = new LinkedHashMap<>();
+        for (int i = 0; i < itemCount; i++) {
+            final int netId = wrapper.read(BedrockTypes.UNSIGNED_VAR_INT); // creative net id
+            final BedrockItem item = wrapper.read(itemRewriter.itemTypeWithoutNetId()); // item
+            wrapper.read(BedrockTypes.UNSIGNED_VAR_INT); // group id
+            creativeItems.put(netId, item);
+        }
+        wrapper.user().get(CreativeContentTracker.class).setCreativeItems(creativeItems);
+    }
+
     public static void register(final BedrockProtocol protocol) {
         protocol.registerClientbound(ClientboundBedrockPackets.CONTAINER_OPEN, ClientboundPackets26_1.OPEN_SCREEN, wrapper -> {
             final ChunkTracker chunkTracker = wrapper.user().get(ChunkTracker.class);
@@ -759,16 +785,22 @@ public class InventoryPackets {
             wrapper.cancel();
             final byte containerId = wrapper.read(Types.BYTE); // container id
             wrapper.read(Types.BYTE); // container type
-            wrapper.read(BedrockTypes.VAR_INT); // slot count
-            final int tier = wrapper.read(BedrockTypes.VAR_INT); // trade tier
-            wrapper.read(BedrockTypes.VAR_LONG); // trader entity unique id
-            wrapper.read(BedrockTypes.VAR_LONG); // player entity unique id
+            wrapper.read(BedrockTypes.UNSIGNED_VAR_INT); // slot count
+            final int tier = wrapper.read(BedrockTypes.UNSIGNED_VAR_INT); // trade tier
+            wrapper.read(BedrockTypes.UNSIGNED_VAR_LONG); // trader entity unique id
+            wrapper.read(BedrockTypes.UNSIGNED_VAR_LONG); // player entity unique id
             wrapper.read(BedrockTypes.STRING); // display name
             wrapper.read(Types.BOOLEAN); // new trading ui
             wrapper.read(Types.BOOLEAN); // economic trades
             final Tag offersTag = wrapper.read(BedrockTypes.NETWORK_TAG); // offers
 
-            final TradeOffers tradeOffers = readTradeOffers(wrapper.user(), containerId, tier, offersTag);
+            final TradeOffers tradeOffers;
+            try {
+                tradeOffers = readTradeOffers(wrapper.user(), containerId, tier, offersTag);
+            } catch (Throwable e) {
+                ViaBedrock.getPlatform().getLogger().log(Level.WARNING, "Failed to read the villager trades", e);
+                return;
+            }
             final InventoryTracker inventoryTracker = wrapper.user().get(InventoryTracker.class);
             inventoryTracker.setTradeOffers(tradeOffers);
 
@@ -814,7 +846,13 @@ public class InventoryPackets {
         });
         protocol.registerClientbound(ClientboundBedrockPackets.PLAYER_ENCHANT_OPTIONS, null, wrapper -> {
             wrapper.cancel();
-            final EnchantOption[] enchantOptions = wrapper.read(BedrockTypes.ENCHANT_OPTION_ARRAY); // options
+            final EnchantOption[] enchantOptions;
+            try {
+                enchantOptions = wrapper.read(BedrockTypes.ENCHANT_OPTION_ARRAY); // options
+            } catch (Throwable e) {
+                ViaBedrock.getPlatform().getLogger().log(Level.WARNING, "Failed to read the enchantment options", e);
+                return;
+            }
 
             final InventoryTracker inventoryTracker = wrapper.user().get(InventoryTracker.class);
             inventoryTracker.setEnchantOptions(enchantOptions);
@@ -860,61 +898,25 @@ public class InventoryPackets {
         });
         protocol.registerClientbound(ClientboundBedrockPackets.CREATIVE_CONTENT, null, wrapper -> {
             wrapper.cancel();
-
-            // VP+ TEMPORARY: capture the raw payload instead of parsing it.
-            //
-            // On a 1.26.44 realm this packet desyncs the item reader and the
-            // resulting exception drops the whole connection. The layout that
-            // changed cannot be worked out from any public reference - the only
-            // way to find it is to look at the bytes a real realm sends, and this
-            // bridge is the only thing positioned to see them.
-            //
-            // Capturing also happens to be the safe behaviour: no parse, no
-            // exception, the session survives without creative items. Delete this
-            // block once the reader matches 1.26.44 and let the parse below run.
-            if (Boolean.parseBoolean(System.getProperty("vpp.capture.creative", "true"))) {
-                final byte[] vppPayload = wrapper.read(Types.REMAINING_BYTES);
-                final int vppShow = Math.min(vppPayload.length, 192);
-                final StringBuilder vppHex = new StringBuilder();
-                final StringBuilder vppAscii = new StringBuilder();
-                for (int vppI = 0; vppI < vppShow; vppI++) {
-                    vppHex.append(String.format("%02X", vppPayload[vppI]));
-                    if ((vppI & 15) == 15) {
-                        vppHex.append('\n');
-                    } else {
-                        vppHex.append(' ');
-                    }
-                    final char vppC = (char) (vppPayload[vppI] & 0xFF);
-                    vppAscii.append(vppC >= 32 && vppC < 127 ? vppC : '.');
-                }
-                ViaBedrock.getPlatform().getLogger().log(Level.WARNING,
-                        "[VP+ capture] CREATIVE_CONTENT payload " + vppPayload.length + " bytes, first "
-                                + vppShow + ":\n" + vppHex + "\nascii: " + vppAscii);
-                return;
+            try {
+                readCreativeContent(wrapper);
+            } catch (Throwable e) {
+                // Without the creative items the player just can't create items in creative mode, which is a lot
+                // better than dropping the connection over it
+                wrapper.user().get(CreativeContentTracker.class).clear();
+                ViaBedrock.getPlatform().getLogger().log(Level.WARNING, "Failed to read the creative content", e);
             }
-
-            final ItemRewriter itemRewriter = wrapper.user().get(ItemRewriter.class);
-
-            final int groupCount = wrapper.read(BedrockTypes.UNSIGNED_VAR_INT); // group count
-            for (int i = 0; i < groupCount; i++) {
-                wrapper.read(BedrockTypes.INT_LE); // category id
-                wrapper.read(BedrockTypes.STRING); // category name
-                wrapper.read(itemRewriter.itemTypeWithoutNetId()); // icon
-            }
-
-            final int itemCount = wrapper.read(BedrockTypes.UNSIGNED_VAR_INT); // item count
-            final Map<Integer, BedrockItem> creativeItems = new LinkedHashMap<>();
-            for (int i = 0; i < itemCount; i++) {
-                final int netId = wrapper.read(BedrockTypes.UNSIGNED_VAR_INT); // creative net id
-                final BedrockItem item = wrapper.read(itemRewriter.itemTypeWithoutNetId()); // item
-                wrapper.read(BedrockTypes.UNSIGNED_VAR_INT); // group id
-                creativeItems.put(netId, item);
-            }
-            wrapper.user().get(CreativeContentTracker.class).setCreativeItems(creativeItems);
         });
         protocol.registerClientbound(ClientboundBedrockPackets.ITEM_STACK_RESPONSE, null, wrapper -> {
             wrapper.cancel();
-            final ItemStackResponse[] responses = wrapper.read(BedrockTypes.ITEM_STACK_RESPONSE_ARRAY); // responses
+            final ItemStackResponse[] responses;
+            try {
+                responses = wrapper.read(BedrockTypes.ITEM_STACK_RESPONSE_ARRAY); // responses
+            } catch (Throwable e) {
+                ViaBedrock.getPlatform().getLogger().log(Level.WARNING, "Failed to read an item stack response", e);
+                resyncOpenScreen(wrapper.user());
+                return;
+            }
 
             final ItemStackRequestTracker itemStackRequestTracker = wrapper.user().get(ItemStackRequestTracker.class);
             for (ItemStackResponse response : responses) {
