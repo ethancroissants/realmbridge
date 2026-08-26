@@ -43,10 +43,26 @@ fi
 echo "    $(stat -c%s "$WORK/viaproxy.jar") bytes"
 
 echo "==> ViaBedrock: $VIABEDROCK_REF @ ${VIABEDROCK_COMMIT:0:12}"
-git clone --quiet --no-checkout "$VIABEDROCK_REPO" "$WORK/viabedrock"
-git -C "$WORK/viabedrock" checkout --quiet "$VIABEDROCK_COMMIT"
-(cd "$WORK/viabedrock" && ./gradlew --quiet --no-daemon build -x test -x javadoc -x javadocJar)
-VB_JAR="$(find "$WORK/viabedrock/build/libs" -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1)"
+# Fetch the pinned commit directly rather than cloning and hoping it is still
+# reachable. The ViaBedrock fork is actively developed, and a rebase or amend
+# orphans the pinned commit: it stays visible through the GitHub API but is no
+# longer in any ref, so a plain clone does not contain it and the checkout dies
+# with "unable to read tree". Falling back to the branch head keeps the build
+# working; the warning is what gets the pin refreshed.
+VB_DIR="$WORK/viabedrock"
+git init --quiet "$VB_DIR"
+git -C "$VB_DIR" remote add origin "$VIABEDROCK_REPO"
+if git -C "$VB_DIR" fetch --quiet --depth 1 origin "$VIABEDROCK_COMMIT" 2>/dev/null; then
+    git -C "$VB_DIR" checkout --quiet FETCH_HEAD
+else
+    echo "::warning::ViaBedrock commit $VIABEDROCK_COMMIT is no longer reachable (rebased or amended)."
+    echo "::warning::Building $VIABEDROCK_REF instead - update viabedrock_commit in proxy/upstream.properties."
+    git -C "$VB_DIR" fetch --quiet --depth 1 origin "$VIABEDROCK_REF"
+    git -C "$VB_DIR" checkout --quiet FETCH_HEAD
+fi
+echo "    building $(git -C "$VB_DIR" rev-parse HEAD)"
+(cd "$VB_DIR" && ./gradlew --quiet --no-daemon build -x test -x javadoc -x javadocJar)
+VB_JAR="$(find "$VB_DIR/build/libs" -name '*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1)"
 [[ -f "$VB_JAR" ]] || { echo "::error::ViaBedrock build produced no jar"; exit 1; }
 echo "    $(basename "$VB_JAR")"
 
