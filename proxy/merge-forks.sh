@@ -46,8 +46,22 @@ raw() { # raw <commit> <repo-relative java path> <dest>
     curl -fsSL "https://raw.githubusercontent.com/$SLUG/$1/src/main/java/$2" -o "$3"
 }
 
-mapfile -t FORKS < <(cd "$SRC" && find . -name '*.java' ! -path './experimental/*' | sed 's|^\./||' | sort)
-echo "forked files: ${#FORKS[@]}"
+# Which files are forks is decided by asking upstream, not by where they sit.
+# Guessing from the path gets this wrong: ExperimentalFeatures.java lives in the
+# experimental package next to code that is entirely ours, but it is upstream's
+# file with local edits - and a fork that never gets re-merged is exactly the
+# silent breakage this script exists to prevent.
+has_upstream() {
+    curl -fsSL -o /dev/null "https://raw.githubusercontent.com/$SLUG/$BASE_COMMIT/src/main/java/net/raphimc/viabedrock/$1" 2>/dev/null
+}
+
+FORKS=()
+OURS=()
+while IFS= read -r rel; do
+    if has_upstream "$rel"; then FORKS+=("$rel"); else OURS+=("$rel"); fi
+done < <(cd "$SRC" && find . -name '*.java' | sed 's|^\./||' | sort)
+
+echo "forked from upstream: ${#FORKS[@]}   ours alone: ${#OURS[@]}"
 echo
 
 conflicted=()
